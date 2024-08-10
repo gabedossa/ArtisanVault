@@ -1,7 +1,14 @@
 package com.dossa.ArtisanVault.project.repository;
 
-import com.dossa.ArtisanVault.project.entity.Cliente;
-import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
 
-public interface ClienteRepository extends JpaRepository<Cliente, Long> {
+public class ClienteRepository {
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+    //Encontrar todos os Cliente no DB
+    // Encontrar Cliente por ID;
+    //Criar Cliente;
+    //Atualizar Cliente;
+    //Excluir Cliente;
 }
