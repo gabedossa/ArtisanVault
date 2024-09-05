@@ -1,6 +1,9 @@
 package com.dossa.ArtisanVault.project.controller;
 
 import com.dossa.ArtisanVault.project.entity.Artista;
+import com.dossa.ArtisanVault.project.entity.LoginArtista;
+import com.dossa.ArtisanVault.project.entity.LoginArtistaResponse;
+import com.dossa.ArtisanVault.project.repository.ArtistaRepository;
 import com.dossa.ArtisanVault.project.service.ArtistaService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -9,55 +12,47 @@ import org.springframework.web.bind.annotation.*;
 
 import java.math.BigInteger;
 import java.util.List;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/artistas")
 public class ArtistaController {
     @Autowired
-    private ArtistaService artService;
-    //Listando Artista
-    @GetMapping
-    public List<Artista> getAllArtistas(){
-        return artService.findAll();
+    private ArtistaRepository artistaRepository;
+
+    // Método para encontrar todos os artistas
+    public List<Artista> findAll() {
+        return artistaRepository.findAll();
     }
 
-    //Listando Artista por id
-    @GetMapping("/{id}")
-    public Artista findById(@PathVariable Long id){
-    return artService.findById(id);
+    // Método para encontrar um artista por ID
+    public Artista findById(Long id) {
+        return artistaRepository.findById(id);
     }
 
-    //Criando Artista
-    @PostMapping("/post")
-    public ResponseEntity<String> createArtista(@RequestBody Artista artista){
-        int result= artService.save(artista);
-        if (result > 0){
-            return ResponseEntity.status(HttpStatus.CREATED).body("Artista criado com sucesso");
-        } else{
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Erro ao criar artista");
-        }
-    }
-    // Deletando Artista
-    @DeleteMapping("/{id}")
-    public ResponseEntity<String> deleteArtista(@PathVariable Long id) {
-        int result = artService.deleteById(id);
-
-        if (result > 0) {
-            return ResponseEntity.ok("Artista excluído com sucesso.");
-        } else {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Artista não encontrado.");
-        }
+    // Método para login de artista (renomeado para verificaArtista)
+    public Optional<Artista> verificaArtista(String email, String senha) {
+        return artistaRepository.LoginArtista(email, senha);
     }
 
-    //Atualizando artista
-    @PutMapping("/{id}")
-    public ResponseEntity<String> updateArtista(@PathVariable Long id, @RequestBody Artista artista) {
-        artista.setIdArtista(id);
-        int result = artService.update(artista);
-        if (result > 0) {
-            return ResponseEntity.ok("Artista atualizado com sucesso.");
-        } else {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Artista não encontrado.");
-        }
+    // Método para criar um novo artista
+    public int save(Artista artista) {
+        return artistaRepository.save(artista);
     }
+
+    // Método para atualizar um artista existente
+    public int update(Artista artista) {
+        return artistaRepository.update(artista);
+    }
+
+    // Método para excluir um artista por ID
+    public int deleteById(Long id) {
+        return artistaRepository.deleteById(id);
+    }
+
+    // Método para encontrar um artista por email
+    public Optional<Artista> findByEmail(String email) {
+        return artistaRepository.findByEmail(email);
+    }
+
 }

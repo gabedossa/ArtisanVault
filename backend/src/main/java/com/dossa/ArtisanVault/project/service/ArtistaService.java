@@ -7,28 +7,46 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigInteger;
 import java.util.List;
+import java.util.Optional;
 
 @Service
 public class ArtistaService {
+
     @Autowired
-    private ArtistaRepository artistaRepo;
+    private ArtistaRepository artistaRepository;
 
-    public List<Artista> findAll(){
-        return artistaRepo.findAll();
+    // Método para encontrar todos os artistas
+    public List<Artista> findAll() {
+        return artistaRepository.findAll();
     }
 
-    public Artista findById(Long id){
-        return artistaRepo.findById(id);
+    // Método para encontrar um artista por ID
+    public Artista findById(Long id) {
+        return artistaRepository.findById(id);
     }
 
-    public int save(Artista artista){
-        return artistaRepo.save(artista);
+    // Método para login de artista (renomeado para verificaArtista)
+    public Optional<Artista> verificaArtista(String email, String senha) {
+        return artistaRepository.LoginArtista(email, senha);
     }
 
-    public int deleteById(Long id){
-        return artistaRepo.deleteById(id);
+    // Método para criar um novo artista
+    public int save(Artista artista) {
+        return artistaRepository.save(artista);
     }
+
+    // Método para atualizar um artista existente
     public int update(Artista artista) {
-        return artistaRepo.update(artista);
+        return artistaRepository.update(artista);
+    }
+
+    // Método para excluir um artista por ID
+    public int deleteById(Long id) {
+        return artistaRepository.deleteById(id);
+    }
+
+    // Método para encontrar um artista por email
+    public Optional<Artista> findByEmail(String email) {
+        return artistaRepository.findByEmail(email);
     }
 }

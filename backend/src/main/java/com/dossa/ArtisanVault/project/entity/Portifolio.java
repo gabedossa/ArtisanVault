@@ -3,35 +3,33 @@ package com.dossa.ArtisanVault.project.entity;
 import jakarta.persistence.*;
 
 @Entity
-@Table(name = "arte")
-public class Arte {
+@Table(name = "portfolio")
+public class Portifolio {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "id_arte")
-    private Long id_arte;
     @Column(name = "id_portfolio")
     private Long id_portfolio;
+    @Column(name = "id_artista")
+    private Long id_artista;
     @Column(name = "titulo")
     private String titulo;
     @Column(name = "descricao")
     private String descricao;
-    @Column(name = "vote")
-    private Long vote;
 
-    public Long getId_arte() {
-        return id_arte;
+    public void setId_portfolio(Long id_portfolio) {
+        this.id_portfolio = id_portfolio;
+    }
+
+    public void setId_artista(Long id_artista) {
+        this.id_artista = id_artista;
     }
 
     public Long getId_portfolio() {
         return id_portfolio;
     }
 
-    public void setId_arte(Long id_arte) {
-        this.id_arte = id_arte;
-    }
-
-    public void setId_portfolio(Long id_portfolio) {
-        this.id_portfolio = id_portfolio;
+    public Long getId_artista() {
+        return id_artista;
     }
 
     public String getTitulo() {
@@ -48,13 +46,5 @@ public class Arte {
 
     public void setDescricao(String descricao) {
         this.descricao = descricao;
-    }
-
-    public Long getVote() {
-        return vote;
-    }
-
-    public void setVote(Long vote) {
-        this.vote = vote;
     }
 }

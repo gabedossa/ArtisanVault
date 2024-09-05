@@ -29,6 +29,26 @@ public class Pedido {
     @Column(name = "trabalhando")
     private Boolean trabalhando;
 
+    public void setId_pedido(Long id_pedido) {
+        this.id_pedido = id_pedido;
+    }
+
+    public void setId_cliente(Long id_cliente) {
+        this.id_cliente = id_cliente;
+    }
+
+    public void setId_artista(Long id_artista) {
+        this.id_artista = id_artista;
+    }
+
+    public void setId_servico(Long id_servico) {
+        this.id_servico = id_servico;
+    }
+
+    public void setId_arte(Long id_arte) {
+        this.id_arte = id_arte;
+    }
+
     public Long getId_pedido() {
         return id_pedido;
     }

@@ -20,10 +20,13 @@ public class Cliente {
     @Column(name = "tipo_usuario")
     private String tipoUsuario;
 
+    public void setIdCliente(Long id){
+        this.idCliente = id;
+    }
+
     public Long getIdCliente() {
         return idCliente;
     }
-
 
     public String getNome() {
         return nome;

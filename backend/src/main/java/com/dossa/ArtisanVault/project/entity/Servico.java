@@ -20,10 +20,17 @@ public class Servico {
         return id_servico;
     }
 
-    public Long getId_artista() {
-        return id_artista;
+    public void setId_servico(Long id_servico) {
+        this.id_servico = id_servico;
     }
 
+    public Double getValor_servico() {
+        return valor_servico;
+    }
+
+    public void setValor_servico(Double valor_servico) {
+        this.valor_servico = valor_servico;
+    }
 
     public String getDescricao() {
         return descricao;
@@ -33,11 +40,11 @@ public class Servico {
         this.descricao = descricao;
     }
 
-    public Double getValor_servico() {
-        return valor_servico;
+    public Long getId_artista() {
+        return id_artista;
     }
 
-    public void setValor_servico(Double valor_servico) {
-        this.valor_servico = valor_servico;
+    public void setId_artista(Long id_artista) {
+        this.id_artista = id_artista;
     }
 }
