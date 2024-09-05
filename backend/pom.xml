@@ -11,6 +11,7 @@
 	<groupId>com.dossa.ArtisanVault</groupId>
 	<artifactId>project</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
+	<packaging>jar</packaging>
 	<name>ArtisanVault</name>
 	<description>Um projeto em springboot para a matéria programação de banco de dados.</description>
 	<url/>
@@ -30,6 +31,13 @@
 		<java.version>21</java.version>
 	</properties>
 	<dependencies>
+
+		<dependency>
+			<groupId>org.springframework.security</groupId>
+			<artifactId>spring-security-core</artifactId>
+			<version>5.8.5</version> <!-- ou a versão mais recente compatível com o seu projeto -->
+		</dependency>
+
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-data-jpa</artifactId>

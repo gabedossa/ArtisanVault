@@ -2,8 +2,9 @@ package com.dossa.ArtisanVault.project.dto;
 
 public class LoginRequest {
     private String email;
-    private String password;
+    private String senha;
 
+    // Getters e Setters
     public String getEmail() {
         return email;
     }
@@ -12,11 +13,11 @@ public class LoginRequest {
         this.email = email;
     }
 
-    public String getPassword() {
-        return password;
+    public String getSenha() {
+        return senha;
     }
 
-    public void setPassword(String password) {
-        this.password = password;
+    public void setSenha(String senha) {
+        this.senha = senha;
     }
 }
