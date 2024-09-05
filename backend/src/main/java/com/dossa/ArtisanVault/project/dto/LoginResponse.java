@@ -5,8 +5,11 @@ public class LoginResponse {
     private String userType;
 
     public LoginResponse(String email, String userType) {
+        this.email = email;
+        this.userType = userType;
     }
 
+    // Getters
     public String getEmail() {
         return email;
     }

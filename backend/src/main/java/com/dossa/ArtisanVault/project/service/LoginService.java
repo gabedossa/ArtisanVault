@@ -28,7 +28,7 @@ public class LoginService {
         if (cliente.isPresent()) {
             System.out.println("Cliente encontrado: " + cliente.get().getEmail());
             if (cliente.get().getSenha().equals(senha)) {
-                return "Cliente";
+                return "CLIENTE";
             } else {
                 System.out.println("Senha incorreta para o cliente: " + email);
                 throw new IllegalArgumentException("Credenciais inválidas");
@@ -41,7 +41,7 @@ public class LoginService {
         if (artista.isPresent()) {
             System.out.println("Artista encontrado: " + artista.get().getEmail());
             if (artista.get().getSenha().equals(senha)) {
-                return "Artista";
+                return "ARTISTA";
             } else {
                 System.out.println("Senha incorreta para o artista: " + email);
                 throw new IllegalArgumentException("Credenciais inválidas");

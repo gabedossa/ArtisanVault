@@ -2,7 +2,7 @@ package com.dossa.ArtisanVault.project.dto;
 
 public class LoginRequest {
     private String email;
-    private String senha;
+    private String senha;  // Certifique-se de que o nome é 'senha' e não 'password'
 
     // Getters e Setters
     public String getEmail() {

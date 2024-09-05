@@ -21,38 +21,77 @@ public class ArtistaController {
     private ArtistaRepository artistaRepository;
 
     // Método para encontrar todos os artistas
-    public List<Artista> findAll() {
-        return artistaRepository.findAll();
+    @GetMapping
+    public ResponseEntity<List<Artista>> findAll() {
+        List<Artista> artistas = artistaRepository.findAll();
+        return ResponseEntity.ok(artistas);
     }
 
     // Método para encontrar um artista por ID
-    public Artista findById(Long id) {
-        return artistaRepository.findById(id);
+    @GetMapping("/{id}")
+    public ResponseEntity<Artista> findById(@PathVariable Long id) {
+        Artista artista = artistaRepository.findById(id);
+        if (artista != null) {
+            return ResponseEntity.ok(artista);
+        } else {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(null);
+        }
     }
 
-    // Método para login de artista (renomeado para verificaArtista)
-    public Optional<Artista> verificaArtista(String email, String senha) {
-        return artistaRepository.LoginArtista(email, senha);
+    // Método para login de artista
+    @PostMapping("/login")
+    public ResponseEntity<String> verificaArtista(@RequestParam String email, @RequestParam String senha) {
+        Optional<Artista> artistaOpt = artistaRepository.LoginArtista(email, senha);
+        if (artistaOpt.isPresent()) {
+            return ResponseEntity.ok("Login bem-sucedido");
+        } else {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("E-mail ou senha inválidos");
+        }
     }
 
     // Método para criar um novo artista
-    public int save(Artista artista) {
-        return artistaRepository.save(artista);
+    @PostMapping
+    public ResponseEntity<String> save(@RequestBody Artista artista) {
+        int result = artistaRepository.save(artista);
+        if (result > 0) {
+            return ResponseEntity.status(HttpStatus.CREATED).body("Artista criado com sucesso");
+        } else {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Erro ao criar artista");
+        }
     }
 
     // Método para atualizar um artista existente
-    public int update(Artista artista) {
-        return artistaRepository.update(artista);
+    @PutMapping("/{id}")
+    public ResponseEntity<String> update(@PathVariable Long id, @RequestBody Artista artista) {
+        artista.setIdArtista(id);
+        int result = artistaRepository.update(artista);
+        if (result > 0) {
+            return ResponseEntity.ok("Artista atualizado com sucesso");
+        } else {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Artista não encontrado");
+        }
     }
 
     // Método para excluir um artista por ID
-    public int deleteById(Long id) {
-        return artistaRepository.deleteById(id);
+    @DeleteMapping("/{id}")
+    public ResponseEntity<String> deleteById(@PathVariable Long id) {
+        int result = artistaRepository.deleteById(id);
+        if (result > 0) {
+            return ResponseEntity.ok("Artista excluído com sucesso");
+        } else {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Artista não encontrado");
+        }
     }
 
     // Método para encontrar um artista por email
-    public Optional<Artista> findByEmail(String email) {
-        return artistaRepository.findByEmail(email);
+    @GetMapping("/email")
+    public ResponseEntity<Optional<Artista>> findByEmail(@RequestParam String email) {
+        Optional<Artista> artista = artistaRepository.findByEmail(email);
+        if (artista.isPresent()) {
+            return ResponseEntity.ok(artista);
+        } else {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Optional.empty());
+        }
     }
 
 }
