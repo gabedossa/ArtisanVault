@@ -1,59 +1,164 @@
 # ArtisanVault
 
-**ArtisanVault** é um sistema full‑stack para cadastro e reserva de artesanato.  O projeto é composto por dois repositórios: o backend em Java (este diretório) e o frontend em React (submódulo chamado *Artsian_front*).  O objetivo é aproximar artesãos e clientes, permitindo que artistas publiquem suas peças e que clientes reservem ou encomendem trabalhos.
+Plataforma full-stack que conecta artistas a clientes. Artistas publicam portfólios e serviços; clientes descobrem talentos e acompanham pedidos — tudo em um único lugar.
 
-## 🧱 Arquitetura
+---
 
-- **Spring Boot** – estrutura o backend em camadas de `controller`, `service`, `repository` e `entity` utilizando JPA e REST.
-- **DTOs** – Data Transfer Objects evitam a exposição direta das entidades e facilitam a serialização/deserialização.
-- **Mapper** – classes `RowMapper` convertem registros do banco em objetos de domínio.
-- **Front‑end React** – localizado no submódulo [`Artsian_front`](../frontend/Artsian_front), utiliza React Router e componentes reutilizáveis.
+## Estrutura do Projeto
 
-## 🔧 Tecnologias
+```text
+ArtisanVault/
+├── backend/                     # API REST — Spring Boot + PostgreSQL
+└── frontend/
+    └── artisanvault-frontend/   # SPA — Next.js + Tailwind CSS
+```
 
-- Java 17
-- Spring Boot 3
-- Spring Data JPA e JDBC
-- PostgreSQL (ou outro banco compatível)
-- React 18 (no submódulo frontend)
+---
 
-## 🚀 Como executar o backend
+## Stack
 
-1. **Pré‑requisitos**: JDK 17+, Maven e um banco de dados PostgreSQL em execução.
-2. Clone este repositório e o submódulo do frontend:
+| Camada   | Tecnologias                                    |
+| -------- | ---------------------------------------------- |
+| Backend  | Java 21, Spring Boot 3.3, JDBC, PostgreSQL     |
+| Frontend | Next.js 16, TypeScript, Tailwind CSS v4, Axios |
 
-   ```bash
-   git clone https://github.com/gabedossa/ArtisanVault.git
-   cd ArtisanVault
-   git submodule update --init --recursive
-   ```
-3. Configure o banco de dados editando o arquivo `application.properties` em `backend/src/main/resources/` com as credenciais corretas.  É recomendável utilizar variáveis de ambiente para senhas.
-4. Execute a aplicação:
+---
 
-   ```bash
-   cd backend
-   mvn spring-boot:run
-   ```
-5. A API estará disponível em `http://localhost:8080`.  Endpoints para cadastro de artistas, obras e reservas podem ser encontrados nos controladores.
+## Funcionalidades
 
-## 🚀 Como executar o frontend
+- Cadastro e login de **Artistas** e **Clientes**
+- Portfólios com galeria de obras por artista
+- Catálogo de serviços com preço
+- Pedidos com status (aguardando / em andamento / entregue)
+- Dashboard do artista — gerenciar perfil, portfólios, serviços e pedidos recebidos
+- Dashboard do cliente — acompanhar pedidos e explorar artistas
+- Busca de artistas por nome ou descrição
 
-1. Após clonar o repositório e atualizar o submódulo, acesse o diretório do frontend:
+---
 
-   ```bash
-   cd frontend/Artsian_front/meu-projeto
-   npm install
-   npm run start
-   ```
-2. A aplicação React estará acessível em `http://localhost:3000`.
+## Pré-requisitos
 
-## ✅ Próximos passos
+- Java 21+
+- Maven 3.9+
+- Node.js 20+
+- PostgreSQL 14+
 
-- Adicionar testes unitários e de integração (JUnit, Mockito para o backend e React Testing Library para o frontend).
-- Implementar autenticação/autorizacão (JWT) para proteger rotas sensíveis.
-- Utilizar ferramentas de migração de banco de dados como **Flyway** ou **Liquibase**.
-- Melhorar a responsividade e acessibilidade da UI.
+---
 
-## 💄 Licença
+## Rodando o Projeto
 
-Projeto criado para fins acadêmicos.  Sinta‑se livre para reutilizar e modificar o código conforme necessário.
+### 1. Banco de Dados
+
+Crie o banco no PostgreSQL:
+
+```sql
+CREATE DATABASE postgres;
+```
+
+### 2. Backend
+
+Configure as credenciais em `backend/src/main/resources/application.properties`:
+
+```properties
+spring.datasource.url=jdbc:postgresql://localhost:5432/postgres
+spring.datasource.username=seu_usuario
+spring.datasource.password=sua_senha
+```
+
+Suba a aplicação:
+
+```bash
+cd backend
+mvn spring-boot:run
+```
+
+A API ficará disponível em `http://localhost:8080`.
+
+### 3. Frontend
+
+```bash
+cd frontend/artisanvault-frontend
+npm install
+npm run dev
+```
+
+A aplicação ficará disponível em `http://localhost:3000`.
+
+---
+
+## Endpoints da API
+
+### Autenticação
+
+| Método | Rota         | Descrição                                     |
+| ------ | ------------ | --------------------------------------------- |
+| POST   | `/api/login` | Login unificado — retorna `{email, userType}` |
+
+### Artistas
+
+| Método | Rota                         | Descrição         |
+| ------ | ---------------------------- | ----------------- |
+| GET    | `/api/artistas`              | Listar todos      |
+| GET    | `/api/artistas/{id}`         | Buscar por ID     |
+| GET    | `/api/artistas/email?email=` | Buscar por email  |
+| POST   | `/api/artistas`              | Criar artista     |
+| PUT    | `/api/artistas/{id}`         | Atualizar artista |
+| DELETE | `/api/artistas/{id}`         | Remover artista   |
+
+### Clientes
+
+| Método | Rota                      | Descrição      |
+| ------ | ------------------------- | -------------- |
+| GET    | `/api/cliente`            | Listar todos   |
+| GET    | `/api/cliente/{id}`       | Buscar por ID  |
+| POST   | `/api/cliente/post`       | Criar cliente  |
+| DELETE | `/api/cliente/delete/{id}`| Remover cliente|
+
+### Portfólios, Serviços, Artes e Pedidos
+
+| Método | Rota                           | Descrição          |
+| ------ | ------------------------------ | ------------------ |
+| GET    | `/api/portifolio`              | Listar portfólios  |
+| GET    | `/api/portifolio/{id}`         | Buscar portfólio   |
+| DELETE | `/api/portifolio/delete/{id}`  | Remover portfólio  |
+| GET    | `/api/servico`                 | Listar serviços    |
+| DELETE | `/api/servico/delete/{id}`     | Remover serviço    |
+| GET    | `/api/arte`                    | Listar obras       |
+| POST   | `/api/arte/post`               | Criar obra         |
+| DELETE | `/api/arte/delete/{id}`        | Remover obra       |
+| GET    | `/api/pedido`                  | Listar pedidos     |
+| GET    | `/api/pedido/{id}`             | Buscar pedido      |
+| DELETE | `/api/pedido/delete/{id}`      | Remover pedido     |
+
+---
+
+## Rotas do Frontend
+
+| Rota                  | Descrição                        |
+| --------------------- | -------------------------------- |
+| `/`                   | Landing page                     |
+| `/artistas`           | Listagem de artistas com busca   |
+| `/artistas/[id]`      | Perfil público do artista        |
+| `/portifolios/[id]`   | Galeria de obras do portfólio    |
+| `/login`              | Login                            |
+| `/cadastro/artista`   | Cadastro de artista              |
+| `/cadastro/cliente`   | Cadastro de cliente              |
+| `/dashboard/artista`  | Dashboard do artista             |
+| `/dashboard/cliente`  | Dashboard do cliente             |
+
+---
+
+## Melhorias Planejadas
+
+- Corrigir bugs nas queries SQL do backend (portfólio, serviço, pedido)
+- Implementar hash de senhas com BCrypt (bean já configurado, não utilizado)
+- Migrar credenciais do banco para variáveis de ambiente
+- Adicionar endpoints POST para Portfólio, Serviço e Pedido
+- Autenticação com JWT
+- Testes unitários e de integração
+
+---
+
+## Licença
+
+Projeto acadêmico. Livre para uso e modificação.
