@@ -69,8 +69,8 @@ export default function DashboardClientePage() {
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
       <div className="mb-8">
         <p className="text-sm text-amber-600 font-semibold mb-1">Dashboard</p>
-        <h1 className="text-3xl font-bold text-gray-900">Olá, {cliente.nome.split(' ')[0]}!</h1>
-        <p className="text-gray-500 text-sm mt-1">Acompanhe seus pedidos e explore artistas</p>
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Olá, {cliente.nome.split(' ')[0]}!</h1>
+        <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">Acompanhe seus pedidos e explore artistas</p>
       </div>
 
       {/* Stats */}

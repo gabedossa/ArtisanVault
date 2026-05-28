@@ -10,10 +10,10 @@ interface Props {
 
 export default function PortifolioCard({ portifolio, onDelete, isOwner }: Props) {
   return (
-    <div className="bg-white rounded-xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-shadow group">
+    <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-5 shadow-sm hover:shadow-md transition-shadow group">
       <div className="flex items-start justify-between gap-2">
-        <div className="bg-violet-50 p-2 rounded-lg">
-          <BookImage className="w-5 h-5 text-violet-600" />
+        <div className="bg-violet-50 dark:bg-violet-900/30 p-2 rounded-lg">
+          <BookImage className="w-5 h-5 text-violet-600 dark:text-violet-400" />
         </div>
         {isOwner && onDelete && (
           <button
@@ -25,13 +25,13 @@ export default function PortifolioCard({ portifolio, onDelete, isOwner }: Props)
           </button>
         )}
       </div>
-      <h4 className="font-semibold text-gray-900 mt-3 mb-1">{portifolio.titulo}</h4>
+      <h4 className="font-semibold text-gray-900 dark:text-white mt-3 mb-1">{portifolio.titulo}</h4>
       {portifolio.descricao && (
-        <p className="text-gray-500 text-sm line-clamp-2 mb-3">{portifolio.descricao}</p>
+        <p className="text-gray-500 dark:text-gray-400 text-sm line-clamp-2 mb-3">{portifolio.descricao}</p>
       )}
       <Link
         href={`/portifolios/${portifolio.id_portfolio}`}
-        className="flex items-center gap-1 text-violet-700 text-sm font-medium hover:gap-2 transition-all"
+        className="flex items-center gap-1 text-violet-700 dark:text-violet-400 text-sm font-medium hover:gap-2 transition-all"
       >
         Ver obras <ArrowRight className="w-3 h-3" />
       </Link>

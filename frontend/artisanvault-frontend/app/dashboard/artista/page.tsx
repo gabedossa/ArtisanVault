@@ -72,11 +72,15 @@ export default function DashboardArtistaPage() {
     if (!artista) return
     setSaving(true)
     try {
-      const updated = await artistaService.update(artista.idArtista, {
-        ...artista,
+      const payload = {
+        idArtista: artista.idArtista,
         nome: editForm.nome,
-        descricao: editForm.descricao,
-      })
+        descricao: editForm.descricao ?? '',
+        email: artista.email,
+        senha: artista.senha ?? '',
+        tipoUsuario: artista.tipoUsuario ?? 'ARTISTA',
+      }
+      const updated = await artistaService.update(artista.idArtista, payload)
       setArtista(updated)
       setEditMode(false)
       setSaveMsg('Perfil atualizado!')
@@ -104,7 +108,7 @@ export default function DashboardArtistaPage() {
     setPedidos((prev) => prev.filter((p) => p.id_pedido !== id))
   }
 
-  const handleAddServico = async (e: React.FormEvent) => {
+  const handleAddServico = async (e: { preventDefault(): void }) => {
     e.preventDefault()
     if (!user?.userId) return
     setSaving(true)
@@ -127,7 +131,7 @@ export default function DashboardArtistaPage() {
     }
   }
 
-  const handleAddPortifolio = async (e: React.FormEvent) => {
+  const handleAddPortifolio = async (e: { preventDefault(): void }) => {
     e.preventDefault()
     if (!user?.userId) return
     setSaving(true)
@@ -171,7 +175,7 @@ export default function DashboardArtistaPage() {
       {/* Header */}
       <div className="mb-8">
         <p className="text-sm text-violet-700 font-semibold mb-1">Dashboard</p>
-        <h1 className="text-3xl font-bold text-gray-900">Olá, {artista.nome.split(' ')[0]}!</h1>
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Olá, {artista?.nome?.split(' ')[0] ?? ''}!</h1>
         <p className="text-gray-500 text-sm mt-1">Gerencie seu perfil, portfólios e serviços</p>
       </div>
 
@@ -193,16 +197,16 @@ export default function DashboardArtistaPage() {
       </div>
 
       {/* Tabs */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-        <div className="flex border-b border-gray-100 overflow-x-auto">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm overflow-hidden">
+        <div className="flex border-b border-gray-100 dark:border-gray-700 overflow-x-auto">
           {tabs.map(({ key, label, icon: Icon, count }) => (
             <button
               key={key}
               onClick={() => setActiveTab(key)}
               className={`flex items-center gap-2 px-5 py-4 text-sm font-medium whitespace-nowrap transition-colors border-b-2 ${
                 activeTab === key
-                  ? 'border-violet-700 text-violet-700 bg-violet-50/50'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                  ? 'border-violet-700 text-violet-700 bg-violet-50/50 dark:bg-violet-900/20'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50 dark:hover:text-gray-300 dark:hover:bg-gray-700'
               }`}
             >
               <Icon className="w-4 h-4" />
@@ -227,27 +231,27 @@ export default function DashboardArtistaPage() {
               )}
               <div className="space-y-5">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5 flex items-center gap-1">
+                  <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                     <User className="w-3.5 h-3.5" /> Nome
                   </label>
                   {editMode ? (
                     <input
                       value={editForm.nome}
                       onChange={(e) => setEditForm({ ...editForm, nome: e.target.value })}
-                      className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+                      className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-violet-500"
                     />
                   ) : (
-                    <p className="text-gray-900 bg-gray-50 px-4 py-2.5 rounded-lg text-sm">{artista.nome}</p>
+                    <p className="text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-700 px-4 py-2.5 rounded-lg text-sm">{artista.nome}</p>
                   )}
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5 flex items-center gap-1">
+                  <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                     <Mail className="w-3.5 h-3.5" /> Email
                   </label>
-                  <p className="text-gray-500 bg-gray-50 px-4 py-2.5 rounded-lg text-sm">{artista.email}</p>
+                  <p className="text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-700 px-4 py-2.5 rounded-lg text-sm">{artista.email}</p>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5 flex items-center gap-1">
+                  <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                     <FileText className="w-3.5 h-3.5" /> Descrição
                   </label>
                   {editMode ? (
@@ -255,10 +259,10 @@ export default function DashboardArtistaPage() {
                       value={editForm.descricao}
                       onChange={(e) => setEditForm({ ...editForm, descricao: e.target.value })}
                       rows={4}
-                      className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none"
+                      className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none"
                     />
                   ) : (
-                    <p className="text-gray-700 bg-gray-50 px-4 py-2.5 rounded-lg text-sm min-h-[80px]">
+                    <p className="text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-gray-700 px-4 py-2.5 rounded-lg text-sm min-h-20">
                       {artista.descricao || 'Nenhuma descrição.'}
                     </p>
                   )}
@@ -275,7 +279,7 @@ export default function DashboardArtistaPage() {
                       </button>
                     </>
                   ) : (
-                    <button onClick={() => setEditMode(true)} className="flex items-center gap-1 border border-gray-200 text-gray-700 text-sm font-medium px-5 py-2 rounded-lg hover:bg-gray-50 transition-colors">
+                    <button onClick={() => setEditMode(true)} className="flex items-center gap-1 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-white text-sm font-medium px-5 py-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
                       <Edit2 className="w-4 h-4" /> Editar Perfil
                     </button>
                   )}
