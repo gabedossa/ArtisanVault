@@ -1,5 +1,7 @@
 # ArtisanVault
 
+*[English version](README.en.md)*
+
 Plataforma full-stack que conecta artistas a clientes. Artistas publicam portfólios e serviços; clientes descobrem talentos e acompanham pedidos — tudo em um único lugar.
 
 ---
@@ -86,6 +88,17 @@ A aplicação ficará disponível em `http://localhost:3000`.
 
 ---
 
+## Testes
+
+O backend possui testes unitários (JUnit 5 + Mockito) cobrindo as regras de negócio dos services principais — login (JWT), cadastro/atualização de artistas e clientes (incluindo o hash de senha com BCrypt).
+
+```bash
+cd backend
+mvn test
+```
+
+---
+
 ## Endpoints da API
 
 ### Autenticação
@@ -151,14 +164,12 @@ A aplicação ficará disponível em `http://localhost:3000`.
 ## Melhorias Planejadas
 
 - Corrigir bugs nas queries SQL do backend (portfólio, serviço, pedido)
-- Implementar hash de senhas com BCrypt (bean já configurado, não utilizado)
 - Migrar credenciais do banco para variáveis de ambiente
 - Adicionar endpoints POST para Portfólio, Serviço e Pedido
-- Autenticação com JWT
-- Testes unitários e de integração
+- Ampliar cobertura de testes para os demais services (Portfólio, Serviço, Arte, Pedido) e adicionar testes de integração
 
 ---
 
 ## Licença
 
-Projeto acadêmico. Livre para uso e modificação.
+Projeto de portfólio demonstrando arquitetura em camadas com Spring Boot. Livre para uso e modificação.
