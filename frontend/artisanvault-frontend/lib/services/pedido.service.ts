@@ -1,5 +1,5 @@
 import api from '../api'
-import { Pedido } from '@/types'
+import { Pedido, Portifolio } from '@/types'
 
 export const pedidoService = {
   async findAll(): Promise<Pedido[]> {
@@ -20,6 +20,28 @@ export const pedidoService = {
   async findByArtista(idArtista: number): Promise<Pedido[]> {
     const all = await pedidoService.findAll()
     return all.filter((p) => p.id_artista === idArtista)
+  },
+
+  async create(data: { id_servico: number; descricao: string }): Promise<Pedido> {
+    const res = await api.post<Pedido>('/pedido', data)
+    return res.data
+  },
+
+  async entregar(
+    id: number,
+    data: { titulo: string; descricao: string; imagem: File }
+  ): Promise<{ pedido: Pedido; trabalho: Portifolio }> {
+    const formData = new FormData()
+    formData.append('titulo', data.titulo)
+    formData.append('descricao', data.descricao)
+    formData.append('imagem', data.imagem)
+
+    const res = await api.post<{ pedido: Pedido; trabalho: Portifolio }>(
+      `/pedido/${id}/entregar`,
+      formData,
+      { headers: { 'Content-Type': undefined } }
+    )
+    return res.data
   },
 
   async delete(id: number): Promise<void> {

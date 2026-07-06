@@ -12,8 +12,8 @@ import PortifolioCard from '@/components/PortifolioCard'
 import ServicoCard from '@/components/ServicoCard'
 import PedidoCard from '@/components/PedidoCard'
 import {
-  User, Mail, FileText, BookImage, Wrench, ShoppingBag,
-  Plus, Save, Edit2, AlertCircle
+  User, Mail, FileText, Images, Wrench, ShoppingBag,
+  Plus, Save, Edit2, ImagePlus, X
 } from 'lucide-react'
 
 type Tab = 'perfil' | 'portifolios' | 'servicos' | 'pedidos'
@@ -35,13 +35,22 @@ export default function DashboardArtistaPage() {
   const [saving, setSaving] = useState(false)
   const [saveMsg, setSaveMsg] = useState('')
 
-  // Novo portfólio
+  // Novo trabalho
   const [showAddPortifolio, setShowAddPortifolio] = useState(false)
   const [newPortifolio, setNewPortifolio] = useState({ titulo: '', descricao: '' })
+  const [newImagem, setNewImagem] = useState<File | null>(null)
+  const [newImagemPreview, setNewImagemPreview] = useState<string>('')
 
-  // Novo serviço
+  // Novo/editar serviço
   const [showAddServico, setShowAddServico] = useState(false)
-  const [newServico, setNewServico] = useState({ descricao: '', valor_servico: '' })
+  const [editingServicoId, setEditingServicoId] = useState<number | null>(null)
+  const [newServico, setNewServico] = useState({ titulo: '', descricao: '', valor_servico: '' })
+
+  // Entrega de arte (pedido)
+  const [deliveringPedido, setDeliveringPedido] = useState<Pedido | null>(null)
+  const [deliverForm, setDeliverForm] = useState({ titulo: '', descricao: '' })
+  const [deliverImagem, setDeliverImagem] = useState<File | null>(null)
+  const [deliverImagemPreview, setDeliverImagemPreview] = useState<string>('')
 
   useEffect(() => {
     if (!authLoading && (!isAuthenticated || user?.userType !== 'ARTISTA')) {
@@ -102,51 +111,101 @@ export default function DashboardArtistaPage() {
     setServicos((prev) => prev.filter((s) => s.id_servico !== id))
   }
 
+  const handleEditServico = (servico: Servico) => {
+    setEditingServicoId(servico.id_servico)
+    setNewServico({
+      titulo: servico.titulo ?? '',
+      descricao: servico.descricao,
+      valor_servico: String(servico.valor_servico),
+    })
+    setShowAddServico(true)
+  }
+
+  const handleCancelServico = () => {
+    setShowAddServico(false)
+    setEditingServicoId(null)
+    setNewServico({ titulo: '', descricao: '', valor_servico: '' })
+  }
+
   const handleDeletePedido = async (id: number) => {
     if (!confirm('Remover este pedido?')) return
     await pedidoService.delete(id)
     setPedidos((prev) => prev.filter((p) => p.id_pedido !== id))
   }
 
-  const handleAddServico = async (e: { preventDefault(): void }) => {
+  const handleDeliverImagemChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] ?? null
+    setDeliverImagem(file)
+    setDeliverImagemPreview(file ? URL.createObjectURL(file) : '')
+  }
+
+  const handleCancelEntrega = () => {
+    setDeliveringPedido(null)
+    setDeliverForm({ titulo: '', descricao: '' })
+    setDeliverImagem(null)
+    setDeliverImagemPreview('')
+  }
+
+  const handleSubmitEntrega = async (e: { preventDefault(): void }) => {
     e.preventDefault()
-    if (!user?.userId) return
+    if (!deliveringPedido || !deliverImagem) return
     setSaving(true)
     try {
-      // NOTE: Backend has no POST /servico endpoint; call goes through but may not persist
-      const created = await fetch('http://localhost:8080/api/servico', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id_artista: user.userId,
-          descricao: newServico.descricao,
-          valor_servico: parseFloat(newServico.valor_servico),
-        }),
-      }).then((r) => r.json())
-      setServicos((prev) => [...prev, created])
-      setNewServico({ descricao: '', valor_servico: '' })
-      setShowAddServico(false)
+      const { pedido, trabalho } = await pedidoService.entregar(deliveringPedido.id_pedido, {
+        titulo: deliverForm.titulo,
+        descricao: deliverForm.descricao,
+        imagem: deliverImagem,
+      })
+      setPedidos((prev) => prev.map((p) => (p.id_pedido === pedido.id_pedido ? pedido : p)))
+      setPortifolios((prev) => [...prev, trabalho])
+      handleCancelEntrega()
     } finally {
       setSaving(false)
     }
   }
 
-  const handleAddPortifolio = async (e: { preventDefault(): void }) => {
+  const handleSubmitServico = async (e: { preventDefault(): void }) => {
     e.preventDefault()
-    if (!user?.userId) return
     setSaving(true)
     try {
-      const created = await fetch('http://localhost:8080/api/portifolio', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id_artista: user.userId,
-          titulo: newPortifolio.titulo,
-          descricao: newPortifolio.descricao,
-        }),
-      }).then((r) => r.json())
+      const payload = {
+        titulo: newServico.titulo,
+        descricao: newServico.descricao,
+        valor_servico: parseFloat(newServico.valor_servico),
+      }
+      if (editingServicoId != null) {
+        const updated = await servicoService.update(editingServicoId, payload)
+        setServicos((prev) => prev.map((s) => (s.id_servico === editingServicoId ? updated : s)))
+      } else {
+        const created = await servicoService.create(payload)
+        setServicos((prev) => [...prev, created])
+      }
+      handleCancelServico()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleImagemChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] ?? null
+    setNewImagem(file)
+    setNewImagemPreview(file ? URL.createObjectURL(file) : '')
+  }
+
+  const handleAddPortifolio = async (e: { preventDefault(): void }) => {
+    e.preventDefault()
+    if (!newImagem) return
+    setSaving(true)
+    try {
+      const created = await portifolioService.create({
+        titulo: newPortifolio.titulo,
+        descricao: newPortifolio.descricao,
+        imagem: newImagem,
+      })
       setPortifolios((prev) => [...prev, created])
       setNewPortifolio({ titulo: '', descricao: '' })
+      setNewImagem(null)
+      setNewImagemPreview('')
       setShowAddPortifolio(false)
     } finally {
       setSaving(false)
@@ -165,7 +224,7 @@ export default function DashboardArtistaPage() {
 
   const tabs: { key: Tab; label: string; icon: React.ElementType; count?: number }[] = [
     { key: 'perfil', label: 'Meu Perfil', icon: User },
-    { key: 'portifolios', label: 'Portfólios', icon: BookImage, count: portifolios.length },
+    { key: 'portifolios', label: 'Trabalhos', icon: Images, count: portifolios.length },
     { key: 'servicos', label: 'Serviços', icon: Wrench, count: servicos.length },
     { key: 'pedidos', label: 'Pedidos', icon: ShoppingBag, count: pedidos.length },
   ]
@@ -176,13 +235,13 @@ export default function DashboardArtistaPage() {
       <div className="mb-8">
         <p className="text-sm text-violet-700 font-semibold mb-1">Dashboard</p>
         <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Olá, {artista?.nome?.split(' ')[0] ?? ''}!</h1>
-        <p className="text-gray-500 text-sm mt-1">Gerencie seu perfil, portfólios e serviços</p>
+        <p className="text-gray-500 text-sm mt-1">Gerencie seu perfil, trabalhos e serviços</p>
       </div>
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-4 mb-8">
         {[
-          { label: 'Portfólios', value: portifolios.length, color: 'bg-violet-50 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300', icon: BookImage },
+          { label: 'Trabalhos', value: portifolios.length, color: 'bg-violet-50 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300', icon: Images },
           { label: 'Serviços', value: servicos.length, color: 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300', icon: Wrench },
           { label: 'Pedidos', value: pedidos.length, color: 'bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-300', icon: ShoppingBag },
         ].map(({ label, value, color, icon: Icon }) => (
@@ -288,45 +347,63 @@ export default function DashboardArtistaPage() {
             </div>
           )}
 
-          {/* TAB: PORTFÓLIOS */}
+          {/* TAB: TRABALHOS */}
           {activeTab === 'portifolios' && (
             <div>
               <div className="flex items-center justify-between mb-5">
-                <p className="text-sm text-gray-500">{portifolios.length} portfólio(s)</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">{portifolios.length} trabalho(s)</p>
                 <button
                   onClick={() => setShowAddPortifolio(!showAddPortifolio)}
                   className="flex items-center gap-1 bg-violet-700 text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-violet-800 transition-colors"
                 >
-                  <Plus className="w-4 h-4" /> Novo Portfólio
+                  <Plus className="w-4 h-4" /> Novo Trabalho
                 </button>
               </div>
 
               {showAddPortifolio && (
-                <form onSubmit={handleAddPortifolio} className="bg-violet-50 rounded-xl border border-violet-100 p-5 mb-5 space-y-3">
-                  <h4 className="font-semibold text-gray-900 text-sm">Novo Portfólio</h4>
-                  <div className="flex items-center gap-2 bg-amber-50 text-amber-700 text-xs px-3 py-2 rounded-lg border border-amber-100">
-                    <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                    O backend ainda não possui endpoint POST para portfólios. Esta funcionalidade estará disponível após a correção do backend.
-                  </div>
+                <form onSubmit={handleAddPortifolio} className="bg-violet-50 dark:bg-violet-900/20 rounded-xl border border-violet-100 dark:border-violet-800/50 p-5 mb-5 space-y-3">
+                  <h4 className="font-semibold text-gray-900 dark:text-white text-sm">Novo Trabalho</h4>
+
+                  <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-4 cursor-pointer hover:border-violet-400 dark:hover:border-violet-500 transition-colors bg-white dark:bg-gray-700">
+                    {newImagemPreview ? (
+                      <img src={newImagemPreview} alt="Pré-visualização" className="max-h-48 rounded-lg object-cover" />
+                    ) : (
+                      <>
+                        <ImagePlus className="w-8 h-8 text-gray-400 dark:text-gray-500" />
+                        <span className="text-sm text-gray-500 dark:text-gray-400">Clique para escolher uma imagem (JPEG, PNG, WEBP ou GIF, até 5MB)</span>
+                      </>
+                    )}
+                    <input required type="file" accept="image/jpeg,image/png,image/webp,image/gif" onChange={handleImagemChange} className="hidden" />
+                  </label>
+                  {newImagemPreview && (
+                    <button
+                      type="button"
+                      onClick={() => { setNewImagem(null); setNewImagemPreview('') }}
+                      className="flex items-center gap-1 text-xs text-red-500 hover:text-red-600"
+                    >
+                      <X className="w-3.5 h-3.5" /> Remover imagem
+                    </button>
+                  )}
+
                   <input
                     required
                     value={newPortifolio.titulo}
                     onChange={(e) => setNewPortifolio({ ...newPortifolio, titulo: e.target.value })}
-                    placeholder="Título do portfólio"
-                    className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 bg-white"
+                    placeholder="Título do trabalho"
+                    className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-white dark:placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-500 bg-white dark:bg-gray-700"
                   />
                   <textarea
                     value={newPortifolio.descricao}
                     onChange={(e) => setNewPortifolio({ ...newPortifolio, descricao: e.target.value })}
                     placeholder="Descrição"
                     rows={2}
-                    className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none bg-white"
+                    className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-white dark:placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none bg-white dark:bg-gray-700"
                   />
                   <div className="flex gap-2">
-                    <button type="submit" disabled={saving} className="bg-violet-700 text-white text-sm font-semibold px-5 py-2 rounded-lg hover:bg-violet-800 disabled:opacity-50">
+                    <button type="submit" disabled={saving || !newImagem} className="bg-violet-700 text-white text-sm font-semibold px-5 py-2 rounded-lg hover:bg-violet-800 disabled:opacity-50">
                       {saving ? 'Salvando...' : 'Salvar'}
                     </button>
-                    <button type="button" onClick={() => setShowAddPortifolio(false)} className="text-gray-500 text-sm px-5 py-2 rounded-lg hover:bg-gray-100">
+                    <button type="button" onClick={() => setShowAddPortifolio(false)} className="text-gray-500 dark:text-gray-400 text-sm px-5 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
                       Cancelar
                     </button>
                   </div>
@@ -340,9 +417,9 @@ export default function DashboardArtistaPage() {
                   ))}
                 </div>
               ) : (
-                <div className="text-center py-12 text-gray-400">
-                  <BookImage className="w-10 h-10 mx-auto mb-3 opacity-20" />
-                  <p className="text-sm">Nenhum portfólio ainda.</p>
+                <div className="text-center py-12 text-gray-400 dark:text-gray-500">
+                  <Images className="w-10 h-10 mx-auto mb-3 opacity-20" />
+                  <p className="text-sm">Nenhum trabalho ainda.</p>
                 </div>
               )}
             </div>
@@ -352,9 +429,9 @@ export default function DashboardArtistaPage() {
           {activeTab === 'servicos' && (
             <div>
               <div className="flex items-center justify-between mb-5">
-                <p className="text-sm text-gray-500">{servicos.length} serviço(s)</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">{servicos.length} serviço(s)</p>
                 <button
-                  onClick={() => setShowAddServico(!showAddServico)}
+                  onClick={() => (showAddServico ? handleCancelServico() : setShowAddServico(true))}
                   className="flex items-center gap-1 bg-amber-500 text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-amber-600 transition-colors"
                 >
                   <Plus className="w-4 h-4" /> Novo Serviço
@@ -362,19 +439,24 @@ export default function DashboardArtistaPage() {
               </div>
 
               {showAddServico && (
-                <form onSubmit={handleAddServico} className="bg-amber-50 rounded-xl border border-amber-100 p-5 mb-5 space-y-3">
-                  <h4 className="font-semibold text-gray-900 text-sm">Novo Serviço</h4>
-                  <div className="flex items-center gap-2 bg-amber-50 text-amber-700 text-xs px-3 py-2 rounded-lg border border-amber-200">
-                    <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                    O backend ainda não possui endpoint POST para serviços. Esta funcionalidade estará disponível após a correção do backend.
-                  </div>
+                <form onSubmit={handleSubmitServico} className="bg-amber-50 dark:bg-amber-900/20 rounded-xl border border-amber-100 dark:border-amber-800/50 p-5 mb-5 space-y-3">
+                  <h4 className="font-semibold text-gray-900 dark:text-white text-sm">
+                    {editingServicoId != null ? 'Editar Serviço' : 'Novo Serviço'}
+                  </h4>
+                  <input
+                    required
+                    value={newServico.titulo}
+                    onChange={(e) => setNewServico({ ...newServico, titulo: e.target.value })}
+                    placeholder="Título do serviço"
+                    className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-white dark:placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white dark:bg-gray-700"
+                  />
                   <textarea
                     required
                     value={newServico.descricao}
                     onChange={(e) => setNewServico({ ...newServico, descricao: e.target.value })}
                     placeholder="Descreva o serviço"
                     rows={2}
-                    className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 resize-none bg-white"
+                    className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-white dark:placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-amber-500 resize-none bg-white dark:bg-gray-700"
                   />
                   <input
                     required
@@ -384,13 +466,13 @@ export default function DashboardArtistaPage() {
                     value={newServico.valor_servico}
                     onChange={(e) => setNewServico({ ...newServico, valor_servico: e.target.value })}
                     placeholder="Valor (R$)"
-                    className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white"
+                    className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-white dark:placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white dark:bg-gray-700"
                   />
                   <div className="flex gap-2">
                     <button type="submit" disabled={saving} className="bg-amber-500 text-white text-sm font-semibold px-5 py-2 rounded-lg hover:bg-amber-600 disabled:opacity-50">
                       {saving ? 'Salvando...' : 'Salvar'}
                     </button>
-                    <button type="button" onClick={() => setShowAddServico(false)} className="text-gray-500 text-sm px-5 py-2 rounded-lg hover:bg-gray-100">
+                    <button type="button" onClick={handleCancelServico} className="text-gray-500 dark:text-gray-400 text-sm px-5 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
                       Cancelar
                     </button>
                   </div>
@@ -400,11 +482,11 @@ export default function DashboardArtistaPage() {
               {servicos.length > 0 ? (
                 <div className="space-y-3">
                   {servicos.map((s) => (
-                    <ServicoCard key={s.id_servico} servico={s} isOwner onDelete={handleDeleteServico} />
+                    <ServicoCard key={s.id_servico} servico={s} isOwner onDelete={handleDeleteServico} onEdit={handleEditServico} />
                   ))}
                 </div>
               ) : (
-                <div className="text-center py-12 text-gray-400">
+                <div className="text-center py-12 text-gray-400 dark:text-gray-500">
                   <Wrench className="w-10 h-10 mx-auto mb-3 opacity-20" />
                   <p className="text-sm">Nenhum serviço cadastrado.</p>
                 </div>
@@ -415,15 +497,68 @@ export default function DashboardArtistaPage() {
           {/* TAB: PEDIDOS */}
           {activeTab === 'pedidos' && (
             <div>
-              <p className="text-sm text-gray-500 mb-5">{pedidos.length} pedido(s) recebido(s)</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-5">{pedidos.length} pedido(s) recebido(s)</p>
+
+              {deliveringPedido && (
+                <form onSubmit={handleSubmitEntrega} className="bg-violet-50 dark:bg-violet-900/20 rounded-xl border border-violet-100 dark:border-violet-800/50 p-5 mb-5 space-y-3">
+                  <h4 className="font-semibold text-gray-900 dark:text-white text-sm">
+                    Enviar arte — Pedido #{deliveringPedido.id_pedido}
+                  </h4>
+
+                  <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-4 cursor-pointer hover:border-violet-400 dark:hover:border-violet-500 transition-colors bg-white dark:bg-gray-700">
+                    {deliverImagemPreview ? (
+                      <img src={deliverImagemPreview} alt="Pré-visualização" className="max-h-48 rounded-lg object-cover" />
+                    ) : (
+                      <>
+                        <ImagePlus className="w-8 h-8 text-gray-400 dark:text-gray-500" />
+                        <span className="text-sm text-gray-500 dark:text-gray-400">Clique para escolher uma imagem (JPEG, PNG, WEBP ou GIF, até 5MB)</span>
+                      </>
+                    )}
+                    <input required type="file" accept="image/jpeg,image/png,image/webp,image/gif" onChange={handleDeliverImagemChange} className="hidden" />
+                  </label>
+                  {deliverImagemPreview && (
+                    <button
+                      type="button"
+                      onClick={() => { setDeliverImagem(null); setDeliverImagemPreview('') }}
+                      className="flex items-center gap-1 text-xs text-red-500 hover:text-red-600"
+                    >
+                      <X className="w-3.5 h-3.5" /> Remover imagem
+                    </button>
+                  )}
+
+                  <input
+                    required
+                    value={deliverForm.titulo}
+                    onChange={(e) => setDeliverForm({ ...deliverForm, titulo: e.target.value })}
+                    placeholder="Título do trabalho"
+                    className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-white dark:placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-500 bg-white dark:bg-gray-700"
+                  />
+                  <textarea
+                    value={deliverForm.descricao}
+                    onChange={(e) => setDeliverForm({ ...deliverForm, descricao: e.target.value })}
+                    placeholder="Descrição"
+                    rows={2}
+                    className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-white dark:placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none bg-white dark:bg-gray-700"
+                  />
+                  <div className="flex gap-2">
+                    <button type="submit" disabled={saving || !deliverImagem} className="bg-violet-700 text-white text-sm font-semibold px-5 py-2 rounded-lg hover:bg-violet-800 disabled:opacity-50">
+                      {saving ? 'Enviando...' : 'Enviar arte'}
+                    </button>
+                    <button type="button" onClick={handleCancelEntrega} className="text-gray-500 dark:text-gray-400 text-sm px-5 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
+                      Cancelar
+                    </button>
+                  </div>
+                </form>
+              )}
+
               {pedidos.length > 0 ? (
                 <div className="space-y-3">
                   {pedidos.map((p) => (
-                    <PedidoCard key={p.id_pedido} pedido={p} isOwner onDelete={handleDeletePedido} />
+                    <PedidoCard key={p.id_pedido} pedido={p} isOwner onDelete={handleDeletePedido} onDeliver={setDeliveringPedido} />
                   ))}
                 </div>
               ) : (
-                <div className="text-center py-12 text-gray-400">
+                <div className="text-center py-12 text-gray-400 dark:text-gray-500">
                   <ShoppingBag className="w-10 h-10 mx-auto mb-3 opacity-20" />
                   <p className="text-sm">Nenhum pedido recebido.</p>
                 </div>

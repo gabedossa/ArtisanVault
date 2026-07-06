@@ -17,6 +17,18 @@ export const portifolioService = {
     return all.filter((p) => p.id_artista === idArtista)
   },
 
+  async create(data: { titulo: string; descricao: string; imagem: File }): Promise<Portifolio> {
+    const formData = new FormData()
+    formData.append('titulo', data.titulo)
+    formData.append('descricao', data.descricao)
+    formData.append('imagem', data.imagem)
+
+    const res = await api.post<Portifolio>('/portifolio', formData, {
+      headers: { 'Content-Type': undefined },
+    })
+    return res.data
+  },
+
   async delete(id: number): Promise<void> {
     await api.delete(`/portifolio/delete/${id}`)
   },

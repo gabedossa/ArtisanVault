@@ -5,14 +5,17 @@ import { useParams } from 'next/navigation'
 import { artistaService } from '@/lib/services/artista.service'
 import { portifolioService } from '@/lib/services/portifolio.service'
 import { servicoService } from '@/lib/services/servico.service'
+import { pedidoService } from '@/lib/services/pedido.service'
 import { Artista, Portifolio, Servico } from '@/types'
 import ServicoCard from '@/components/ServicoCard'
 import PortifolioCard from '@/components/PortifolioCard'
 import { Mail, ArrowLeft, Palette } from 'lucide-react'
 import Link from 'next/link'
+import { useAuth } from '@/contexts/AuthContext'
 
 export default function ArtistaProfilePage() {
   const { id } = useParams<{ id: string }>()
+  const { user } = useAuth()
   const [artista, setArtista] = useState<Artista | null>(null)
   const [portifolios, setPortifolios] = useState<Portifolio[]>([])
   const [servicos, setServicos] = useState<Servico[]>([])
@@ -34,6 +37,12 @@ export default function ArtistaProfilePage() {
       .catch(() => setNotFound(true))
       .finally(() => setLoading(false))
   }, [id])
+
+  const canRequest = user?.userType === 'CLIENTE'
+
+  const handleRequest = async (servico: Servico, mensagem: string) => {
+    await pedidoService.create({ id_servico: servico.id_servico, descricao: mensagem })
+  }
 
   const initials = artista?.nome
     .split(' ')
@@ -98,7 +107,7 @@ export default function ArtistaProfilePage() {
         {servicos.length > 0 ? (
           <div className="space-y-3">
             {servicos.map((s) => (
-              <ServicoCard key={s.id_servico} servico={s} />
+              <ServicoCard key={s.id_servico} servico={s} onRequest={canRequest ? handleRequest : undefined} />
             ))}
           </div>
         ) : (
@@ -108,10 +117,10 @@ export default function ArtistaProfilePage() {
         )}
       </section>
 
-      {/* Portfólios */}
+      {/* Trabalhos */}
       <section>
         <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
-          Portfólios{' '}
+          Trabalhos{' '}
           <span className="text-sm font-normal text-gray-400 dark:text-gray-500">({portifolios.length})</span>
         </h2>
         {portifolios.length > 0 ? (
@@ -122,7 +131,7 @@ export default function ArtistaProfilePage() {
           </div>
         ) : (
           <p className="text-gray-400 dark:text-gray-500 text-sm py-6 text-center bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700">
-            Nenhum portfólio cadastrado.
+            Nenhum trabalho cadastrado.
           </p>
         )}
       </section>

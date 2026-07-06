@@ -12,6 +12,16 @@ export const servicoService = {
     return all.filter((s) => s.id_artista === idArtista)
   },
 
+  async create(data: { titulo: string; descricao: string; valor_servico: number }): Promise<Servico> {
+    const res = await api.post<Servico>('/servico', data)
+    return res.data
+  },
+
+  async update(id: number, data: { titulo: string; descricao: string; valor_servico: number }): Promise<Servico> {
+    const res = await api.put<Servico>(`/servico/${id}`, data)
+    return res.data
+  },
+
   async delete(id: number): Promise<void> {
     await api.delete(`/servico/delete/${id}`)
   },

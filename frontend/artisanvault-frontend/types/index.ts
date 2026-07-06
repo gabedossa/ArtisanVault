@@ -19,6 +19,7 @@ export interface Cliente {
 export interface Servico {
   id_servico: number
   id_artista: number
+  titulo: string
   descricao: string
   valor_servico: number
 }
@@ -28,6 +29,9 @@ export interface Portifolio {
   id_artista: number
   titulo: string
   descricao: string
+  imagem_url?: string
+  id_cliente?: number
+  id_pedido?: number
 }
 
 export interface Arte {
@@ -49,6 +53,8 @@ export interface Pedido {
   dt_previsao_entrega: string
   entregue: boolean
   trabalhando: boolean
+  id_portfolio?: number
+  imagem_url?: string
 }
 
 export interface LoginRequest {
