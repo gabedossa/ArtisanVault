@@ -15,8 +15,14 @@ public class ServicoService {
 
     public List<Servico> findAll(){return servRepo.findAll();}
 
-    public int save(Servico service){
+    public Servico findById(Long id){return servRepo.findById(id);}
+
+    public Servico save(Servico service){
         return servRepo.save(service);
+    }
+
+    public int update(Servico servico){
+        return servRepo.update(servico);
     }
 
     public int deleteById(Long id){return servRepo.deleteById(id);}

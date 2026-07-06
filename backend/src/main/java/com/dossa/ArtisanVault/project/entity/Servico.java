@@ -11,6 +11,8 @@ public class Servico {
     private Long id_servico;
     @Column(name = "id_artista")
     private Long id_artista;
+    @Column(name = "titulo")
+    private String titulo;
     @Column(name = "descricao")
     private String descricao;
     @Column(name = "valor_servico")
@@ -46,5 +48,13 @@ public class Servico {
 
     public void setId_artista(Long id_artista) {
         this.id_artista = id_artista;
+    }
+
+    public String getTitulo() {
+        return titulo;
+    }
+
+    public void setTitulo(String titulo) {
+        this.titulo = titulo;
     }
 }
