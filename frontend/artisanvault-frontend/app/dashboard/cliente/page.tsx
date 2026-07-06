@@ -76,13 +76,13 @@ export default function DashboardClientePage() {
       {/* Stats */}
       <div className="grid grid-cols-3 gap-4 mb-8">
         {[
-          { label: 'Aguardando', value: aguardando, color: 'bg-amber-50 text-amber-700' },
-          { label: 'Em andamento', value: emAndamento, color: 'bg-blue-50 text-blue-700' },
-          { label: 'Entregues', value: entregues, color: 'bg-green-50 text-green-700' },
+          { label: 'Aguardando', value: aguardando, color: 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300' },
+          { label: 'Em andamento', value: emAndamento, color: 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' },
+          { label: 'Entregues', value: entregues, color: 'bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-300' },
         ].map(({ label, value, color }) => (
-          <div key={label} className="bg-white rounded-xl border border-gray-100 p-5 shadow-sm">
+          <div key={label} className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-5 shadow-sm">
             <div className={`inline-block text-xs font-semibold px-2 py-1 rounded-full ${color} mb-2`}>{label}</div>
-            <div className="text-2xl font-bold text-gray-900">{value}</div>
+            <div className="text-2xl font-bold text-gray-900 dark:text-white">{value}</div>
           </div>
         ))}
       </div>
@@ -105,16 +105,16 @@ export default function DashboardClientePage() {
       </Link>
 
       {/* Tabs */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-        <div className="flex border-b border-gray-100">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm overflow-hidden">
+        <div className="flex border-b border-gray-100 dark:border-gray-700">
           {tabs.map(({ key, label, icon: Icon, count }) => (
             <button
               key={key}
               onClick={() => setActiveTab(key)}
               className={`flex items-center gap-2 px-5 py-4 text-sm font-medium whitespace-nowrap transition-colors border-b-2 ${
                 activeTab === key
-                  ? 'border-amber-500 text-amber-600 bg-amber-50/50'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                  ? 'border-amber-500 text-amber-600 bg-amber-50/50 dark:bg-amber-900/20'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50 dark:hover:text-gray-300 dark:hover:bg-gray-700'
               }`}
             >
               <Icon className="w-4 h-4" />
@@ -163,10 +163,10 @@ export default function DashboardClientePage() {
                 { icon: Phone, label: 'Telefone', value: cliente.telefone },
               ].map(({ icon: Icon, label, value }) => (
                 <div key={label}>
-                  <label className="flex items-center gap-1 text-sm font-medium text-gray-700 mb-1.5">
+                  <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                     <Icon className="w-3.5 h-3.5" /> {label}
                   </label>
-                  <p className="text-gray-800 bg-gray-50 px-4 py-2.5 rounded-lg text-sm">{value || '—'}</p>
+                  <p className="text-gray-800 dark:text-gray-200 bg-gray-50 dark:bg-gray-700 px-4 py-2.5 rounded-lg text-sm">{value || '—'}</p>
                 </div>
               ))}
             </div>

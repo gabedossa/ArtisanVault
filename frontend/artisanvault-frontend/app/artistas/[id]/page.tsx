@@ -70,30 +70,30 @@ export default function ArtistaProfilePage() {
       </Link>
 
       {/* Header do perfil */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-8">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm overflow-hidden mb-8">
         <div className="bg-linear-to-br from-violet-500 to-purple-700 h-28" />
         <div className="px-6 pb-6">
           <div className="flex items-end gap-5 -mt-10 mb-4">
-            <div className="w-20 h-20 rounded-2xl bg-white border-4 border-white shadow-md flex items-center justify-center text-violet-700 font-bold text-2xl bg-violet-100">
+            <div className="w-20 h-20 rounded-2xl border-4 border-white dark:border-gray-800 shadow-md flex items-center justify-center text-violet-700 dark:text-violet-300 font-bold text-2xl bg-violet-100 dark:bg-violet-900/40">
               {initials}
             </div>
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">{artista.nome}</h1>
-          <div className="flex items-center gap-1 text-gray-500 text-sm mt-1 mb-4">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{artista.nome}</h1>
+          <div className="flex items-center gap-1 text-gray-500 dark:text-gray-400 text-sm mt-1 mb-4">
             <Mail className="w-4 h-4" />
             {artista.email}
           </div>
           {artista.descricao && (
-            <p className="text-gray-600 leading-relaxed max-w-2xl">{artista.descricao}</p>
+            <p className="text-gray-600 dark:text-gray-300 leading-relaxed max-w-2xl">{artista.descricao}</p>
           )}
         </div>
       </div>
 
       {/* Serviços */}
       <section className="mb-8">
-        <h2 className="text-xl font-bold text-gray-900 mb-4">
+        <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
           Serviços{' '}
-          <span className="text-sm font-normal text-gray-400">({servicos.length})</span>
+          <span className="text-sm font-normal text-gray-400 dark:text-gray-500">({servicos.length})</span>
         </h2>
         {servicos.length > 0 ? (
           <div className="space-y-3">
@@ -102,7 +102,7 @@ export default function ArtistaProfilePage() {
             ))}
           </div>
         ) : (
-          <p className="text-gray-400 text-sm py-6 text-center bg-white rounded-xl border border-gray-100">
+          <p className="text-gray-400 dark:text-gray-500 text-sm py-6 text-center bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700">
             Nenhum serviço cadastrado.
           </p>
         )}
@@ -110,9 +110,9 @@ export default function ArtistaProfilePage() {
 
       {/* Portfólios */}
       <section>
-        <h2 className="text-xl font-bold text-gray-900 mb-4">
+        <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
           Portfólios{' '}
-          <span className="text-sm font-normal text-gray-400">({portifolios.length})</span>
+          <span className="text-sm font-normal text-gray-400 dark:text-gray-500">({portifolios.length})</span>
         </h2>
         {portifolios.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -121,7 +121,7 @@ export default function ArtistaProfilePage() {
             ))}
           </div>
         ) : (
-          <p className="text-gray-400 text-sm py-6 text-center bg-white rounded-xl border border-gray-100">
+          <p className="text-gray-400 dark:text-gray-500 text-sm py-6 text-center bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700">
             Nenhum portfólio cadastrado.
           </p>
         )}

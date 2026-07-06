@@ -182,16 +182,16 @@ export default function DashboardArtistaPage() {
       {/* Stats */}
       <div className="grid grid-cols-3 gap-4 mb-8">
         {[
-          { label: 'Portfólios', value: portifolios.length, color: 'bg-violet-50 text-violet-700', icon: BookImage },
-          { label: 'Serviços', value: servicos.length, color: 'bg-amber-50 text-amber-700', icon: Wrench },
-          { label: 'Pedidos', value: pedidos.length, color: 'bg-green-50 text-green-700', icon: ShoppingBag },
+          { label: 'Portfólios', value: portifolios.length, color: 'bg-violet-50 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300', icon: BookImage },
+          { label: 'Serviços', value: servicos.length, color: 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300', icon: Wrench },
+          { label: 'Pedidos', value: pedidos.length, color: 'bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-300', icon: ShoppingBag },
         ].map(({ label, value, color, icon: Icon }) => (
-          <div key={label} className="bg-white rounded-xl border border-gray-100 p-5 shadow-sm">
+          <div key={label} className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-5 shadow-sm">
             <div className={`inline-flex p-2 rounded-lg ${color} mb-3`}>
               <Icon className="w-4 h-4" />
             </div>
-            <div className="text-2xl font-bold text-gray-900">{value}</div>
-            <div className="text-sm text-gray-500">{label}</div>
+            <div className="text-2xl font-bold text-gray-900 dark:text-white">{value}</div>
+            <div className="text-sm text-gray-500 dark:text-gray-400">{label}</div>
           </div>
         ))}
       </div>
