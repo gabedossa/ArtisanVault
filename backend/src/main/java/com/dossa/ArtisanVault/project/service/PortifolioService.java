@@ -1,6 +1,5 @@
 package com.dossa.ArtisanVault.project.service;
 
-import com.dossa.ArtisanVault.project.entity.Pedido;
 import com.dossa.ArtisanVault.project.entity.Portifolio;
 import com.dossa.ArtisanVault.project.repository.PortifolioRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,7 +18,7 @@ public class PortifolioService {
         return portRepo.findById(id);
     }
 
-    public int save(Portifolio portifolio){
+    public Portifolio save(Portifolio portifolio){
         return portRepo.save(portifolio);
     }
 

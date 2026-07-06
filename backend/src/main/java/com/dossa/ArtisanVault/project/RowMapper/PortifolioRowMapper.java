@@ -1,6 +1,5 @@
 package com.dossa.ArtisanVault.project.RowMapper;
 
-import com.dossa.ArtisanVault.project.entity.Pedido;
 import com.dossa.ArtisanVault.project.entity.Portifolio;
 import org.springframework.jdbc.core.RowMapper;
 
@@ -15,6 +14,7 @@ public class PortifolioRowMapper implements RowMapper<Portifolio> {
         portfolio.setId_artista(rs.getLong("id_artista"));
         portfolio.setTitulo(rs.getString("titulo"));
         portfolio.setDescricao(rs.getString("descricao"));
+        portfolio.setImagem_url(rs.getString("imagem_url"));
 
         return portfolio;
     }

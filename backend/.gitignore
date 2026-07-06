@@ -3,6 +3,9 @@ target/
 
 ### Segredos locais ###
 src/main/resources/application-local.properties
+
+### Uploads de usuário ###
+uploads/
 !.mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/

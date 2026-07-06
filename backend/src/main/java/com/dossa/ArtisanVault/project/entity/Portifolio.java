@@ -15,6 +15,8 @@ public class Portifolio {
     private String titulo;
     @Column(name = "descricao")
     private String descricao;
+    @Column(name = "imagem_url")
+    private String imagem_url;
 
     public void setId_portfolio(Long id_portfolio) {
         this.id_portfolio = id_portfolio;
@@ -46,5 +48,13 @@ public class Portifolio {
 
     public void setDescricao(String descricao) {
         this.descricao = descricao;
+    }
+
+    public String getImagem_url() {
+        return imagem_url;
+    }
+
+    public void setImagem_url(String imagem_url) {
+        this.imagem_url = imagem_url;
     }
 }
