@@ -20,7 +20,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const stored = localStorage.getItem('artisanvault_user')
-    if (stored) setUser(JSON.parse(stored))
+    const token = localStorage.getItem('artisanvault_token')
+    if (stored && token) {
+      setUser(JSON.parse(stored))
+    } else if (stored) {
+      localStorage.removeItem('artisanvault_user')
+      localStorage.removeItem('artisanvault_token')
+    }
     setLoading(false)
   }, [])
 
