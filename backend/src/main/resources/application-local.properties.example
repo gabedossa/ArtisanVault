@@ -1,0 +1,2 @@
+spring.datasource.password=troque-pela-senha-real-do-seu-postgres
+jwt.secret=troque-por-um-segredo-base64-de-pelo-menos-256-bits

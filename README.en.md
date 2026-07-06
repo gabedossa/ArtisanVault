@@ -59,13 +59,20 @@ CREATE DATABASE postgres;
 
 ### 2. Backend
 
-Configure the credentials in `backend/src/main/resources/application.properties`:
+Create `backend/src/main/resources/application-local.properties` (gitignored) from the template:
+
+```bash
+cp backend/src/main/resources/application-local.properties.example backend/src/main/resources/application-local.properties
+```
+
+And fill it in with your real credentials:
 
 ```properties
-spring.datasource.url=jdbc:postgresql://localhost:5432/postgres
-spring.datasource.username=your_username
 spring.datasource.password=your_password
+jwt.secret=a_base64_secret_of_at_least_256_bits
 ```
+
+This file is never committed — secrets stay out of version control.
 
 Start the application:
 
