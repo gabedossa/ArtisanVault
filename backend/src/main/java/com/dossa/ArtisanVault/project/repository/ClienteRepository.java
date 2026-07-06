@@ -59,13 +59,4 @@ public class ClienteRepository {
         return jdbcTemplate.update(sql, id);
     }
 
-    public Optional<Cliente> LoginCliente(String email, String senha) {
-        String sql = "SELECT * FROM cliente WHERE email = ? AND senha = ?";
-        try {
-            Cliente cliente = jdbcTemplate.queryForObject(sql, new Object[]{email, senha}, new ClienteRowMapper());
-            return Optional.ofNullable(cliente);
-        } catch (Exception e) {
-            return Optional.empty();
-        }
-    }
 }

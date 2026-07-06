@@ -29,21 +29,6 @@ public class ArtistaRepository {
         return jdbcTemplate.queryForObject(sql, new BeanPropertyRowMapper<>(Artista.class), id);
     }
 
-    // Método para encontrar Artista por email e senha (usado para login)
-    public Optional<Artista> LoginArtista(String email, String senha){
-        String sql = "SELECT * FROM artista WHERE email = ? AND senha = ?";
-        try {
-            List<Artista> artistas = jdbcTemplate.query(sql, new Object[]{email, senha}, new ArtistaRowMapper());
-            if (artistas.isEmpty()) {
-                return Optional.empty();
-            } else {
-                return Optional.of(artistas.get(0));
-            }
-        } catch (Exception e) {
-            return Optional.empty();
-        }
-    }
-
     // Criar Artista
     public int save(Artista artista){
         String sql = "INSERT INTO artista (nome, descricao, email, senha, tipo_usuario) VALUES (?, ?, ?, ?, ?)";

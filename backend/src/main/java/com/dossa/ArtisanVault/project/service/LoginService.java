@@ -1,10 +1,14 @@
 package com.dossa.ArtisanVault.project.service;
 
+import com.dossa.ArtisanVault.project.dto.LoginResponse;
 import com.dossa.ArtisanVault.project.entity.Artista;
 import com.dossa.ArtisanVault.project.entity.Cliente;
 import com.dossa.ArtisanVault.project.repository.ArtistaRepository;
 import com.dossa.ArtisanVault.project.repository.ClienteRepository;
+import com.dossa.ArtisanVault.project.security.JwtService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -21,35 +25,30 @@ public class LoginService {
     @Autowired
     private PasswordEncoder passwordEncoder;
 
-    public String login(String email, String senha) {
-        System.out.println("Tentando fazer login com email: " + email);
+    @Autowired
+    private JwtService jwtService;
 
-        Optional<Cliente> cliente = clienteRepository.findByEmail(email);
-        if (cliente.isPresent()) {
-            System.out.println("Cliente encontrado: " + cliente.get().getEmail());
-            if (cliente.get().getSenha().equals(senha)) {
-                return "CLIENTE";
-            } else {
-                System.out.println("Senha incorreta para o cliente: " + email);
-                throw new IllegalArgumentException("Credenciais inválidas");
+    public LoginResponse login(String email, String senha) {
+        Optional<Cliente> clienteOpt = clienteRepository.findByEmail(email);
+        if (clienteOpt.isPresent()) {
+            Cliente cliente = clienteOpt.get();
+            if (!passwordEncoder.matches(senha, cliente.getSenha())) {
+                throw new BadCredentialsException("Credenciais inválidas");
             }
-        } else {
-            System.out.println("Cliente não encontrado: " + email);
+            String token = jwtService.generateToken(cliente.getEmail(), "CLIENTE", cliente.getIdCliente());
+            return new LoginResponse(cliente.getEmail(), "CLIENTE", cliente.getIdCliente(), cliente.getNome(), token);
         }
 
-        Optional<Artista> artista = artistaRepository.findByEmail(email);
-        if (artista.isPresent()) {
-            System.out.println("Artista encontrado: " + artista.get().getEmail());
-            if (artista.get().getSenha().equals(senha)) {
-                return "ARTISTA";
-            } else {
-                System.out.println("Senha incorreta para o artista: " + email);
-                throw new IllegalArgumentException("Credenciais inválidas");
+        Optional<Artista> artistaOpt = artistaRepository.findByEmail(email);
+        if (artistaOpt.isPresent()) {
+            Artista artista = artistaOpt.get();
+            if (!passwordEncoder.matches(senha, artista.getSenha())) {
+                throw new BadCredentialsException("Credenciais inválidas");
             }
-        } else {
-            System.out.println("Artista não encontrado: " + email);
+            String token = jwtService.generateToken(artista.getEmail(), "ARTISTA", artista.getIdArtista());
+            return new LoginResponse(artista.getEmail(), "ARTISTA", artista.getIdArtista(), artista.getNome(), token);
         }
 
-        System.out.println("Credenciais inválidas para: " + email);
-        throw new IllegalArgumentException("Credenciais inválidas");}
+        throw new UsernameNotFoundException("Credenciais inválidas");
+    }
 }

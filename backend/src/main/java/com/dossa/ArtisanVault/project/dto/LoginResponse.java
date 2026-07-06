@@ -3,18 +3,35 @@ package com.dossa.ArtisanVault.project.dto;
 public class LoginResponse {
     private String email;
     private String userType;
+    private Long userId;
+    private String nome;
+    private String token;
 
-    public LoginResponse(String email, String userType) {
+    public LoginResponse(String email, String userType, Long userId, String nome, String token) {
         this.email = email;
         this.userType = userType;
+        this.userId = userId;
+        this.nome = nome;
+        this.token = token;
     }
 
-    // Getters
     public String getEmail() {
         return email;
     }
 
     public String getUserType() {
         return userType;
+    }
+
+    public Long getUserId() {
+        return userId;
+    }
+
+    public String getNome() {
+        return nome;
+    }
+
+    public String getToken() {
+        return token;
     }
 }

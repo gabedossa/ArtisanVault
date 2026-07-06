@@ -1,6 +1,6 @@
 package com.dossa.ArtisanVault.project.controller;
 
-import com.dossa.ArtisanVault.project.entity.*;
+import com.dossa.ArtisanVault.project.entity.Cliente;
 import com.dossa.ArtisanVault.project.service.ClienteService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -8,7 +8,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/cliente")
@@ -46,18 +45,6 @@ public class ClienteController {
             return ResponseEntity.ok("Artista excluído com sucesso.");
         } else {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Artista não encontrado.");
-        }
-    }
-
-    @PostMapping("/login")
-    public ResponseEntity<?> Logincliente(@RequestBody LoginArtista request){
-        Optional<Cliente> clienteOpt = cliService.verificaArtista(request.getEmail(), request.getSenha());
-        System.out.println("ClienteOPT encontrado: " + clienteOpt);
-        if(clienteOpt.isPresent()){
-            Cliente cliente = clienteOpt.get();
-            return ResponseEntity.ok(new LoginClienteResponse(cliente.getTipoUsuario()));
-        } else {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Cliente encontrado: "+ clienteOpt);
         }
     }
 }

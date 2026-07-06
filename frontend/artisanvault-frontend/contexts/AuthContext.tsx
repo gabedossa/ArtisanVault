@@ -3,8 +3,6 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
 import { AuthUser, LoginRequest } from '@/types'
 import { authService } from '@/lib/services/auth.service'
-import { artistaService } from '@/lib/services/artista.service'
-import { clienteService } from '@/lib/services/cliente.service'
 
 interface AuthContextType {
   user: AuthUser | null
@@ -29,29 +27,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (data: LoginRequest) => {
     const res = await authService.login(data)
 
-    let userId: number | null = null
-    let userName: string | null = null
-
-    if (res.userType === 'ARTISTA') {
-      const artista = await artistaService.findByEmail(res.email)
-      userId = artista.idArtista
-      userName = artista.nome
-    } else {
-      const cliente = await clienteService.findByEmail(res.email)
-      if (cliente) {
-        userId = cliente.idCliente
-        userName = cliente.nome
-      }
+    const authUser: AuthUser = {
+      email: res.email,
+      userType: res.userType,
+      userId: res.userId,
+      userName: res.nome,
     }
-
-    const authUser: AuthUser = { email: res.email, userType: res.userType, userId, userName }
     setUser(authUser)
     localStorage.setItem('artisanvault_user', JSON.stringify(authUser))
+    localStorage.setItem('artisanvault_token', res.token)
   }
 
   const logout = () => {
     setUser(null)
     localStorage.removeItem('artisanvault_user')
+    localStorage.removeItem('artisanvault_token')
   }
 
   return (

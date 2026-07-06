@@ -26,8 +26,8 @@ public class LoginController {
         }
 
         try {
-            String userType = loginService.login(loginRequest.getEmail(), loginRequest.getSenha());
-            return ResponseEntity.ok(new LoginResponse(loginRequest.getEmail(), userType));
+            LoginResponse response = loginService.login(loginRequest.getEmail(), loginRequest.getSenha());
+            return ResponseEntity.ok(response);
         } catch (UsernameNotFoundException | BadCredentialsException exception) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(exception.getMessage());
         }

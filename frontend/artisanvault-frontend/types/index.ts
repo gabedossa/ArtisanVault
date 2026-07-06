@@ -59,6 +59,9 @@ export interface LoginRequest {
 export interface LoginResponse {
   email: string
   userType: 'ARTISTA' | 'CLIENTE'
+  userId: number
+  nome: string
+  token: string
 }
 
 export interface AuthUser {
