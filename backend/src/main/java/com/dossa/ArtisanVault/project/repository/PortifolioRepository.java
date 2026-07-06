@@ -9,6 +9,7 @@ import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
 
 import java.sql.PreparedStatement;
+import java.sql.Types;
 import java.util.List;
 
 @Repository
@@ -36,7 +37,7 @@ public class PortifolioRepository {
 
     //Criar portifolio;
     public Portifolio save(Portifolio portifolio){
-        String sql = "INSERT INTO portfolio (id_artista, titulo, descricao, imagem_url) VALUES (?, ?, ?, ?)";
+        String sql = "INSERT INTO portfolio (id_artista, titulo, descricao, imagem_url, id_cliente, id_pedido) VALUES (?, ?, ?, ?, ?, ?)";
         KeyHolder keyHolder = new GeneratedKeyHolder();
         jdbcTemplate.update(connection -> {
             PreparedStatement ps = connection.prepareStatement(sql, new String[]{"id_portfolio"});
@@ -44,6 +45,16 @@ public class PortifolioRepository {
             ps.setString(2, portifolio.getTitulo());
             ps.setString(3, portifolio.getDescricao());
             ps.setString(4, portifolio.getImagem_url());
+            if (portifolio.getId_cliente() != null) {
+                ps.setLong(5, portifolio.getId_cliente());
+            } else {
+                ps.setNull(5, Types.BIGINT);
+            }
+            if (portifolio.getId_pedido() != null) {
+                ps.setLong(6, portifolio.getId_pedido());
+            } else {
+                ps.setNull(6, Types.BIGINT);
+            }
             return ps;
         }, keyHolder);
         portifolio.setId_portfolio(keyHolder.getKeyAs(Number.class).longValue());

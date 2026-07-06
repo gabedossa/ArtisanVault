@@ -15,6 +15,8 @@ public class PortifolioRowMapper implements RowMapper<Portifolio> {
         portfolio.setTitulo(rs.getString("titulo"));
         portfolio.setDescricao(rs.getString("descricao"));
         portfolio.setImagem_url(rs.getString("imagem_url"));
+        portfolio.setId_cliente(rs.getObject("id_cliente", Long.class));
+        portfolio.setId_pedido(rs.getObject("id_pedido", Long.class));
 
         return portfolio;
     }

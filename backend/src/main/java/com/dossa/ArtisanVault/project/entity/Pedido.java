@@ -28,6 +28,10 @@ public class Pedido {
     private Boolean entregue;
     @Column(name = "trabalhando")
     private Boolean trabalhando;
+    @Column(name = "id_portfolio")
+    private Long id_portfolio;
+    @Column(name = "imagem_url")
+    private String imagem_url;
 
     public void setId_pedido(Long id_pedido) {
         this.id_pedido = id_pedido;
@@ -108,5 +112,21 @@ public class Pedido {
 
     public void setTrabalhando(Boolean trabalhando) {
         this.trabalhando = trabalhando;
+    }
+
+    public Long getId_portfolio() {
+        return id_portfolio;
+    }
+
+    public void setId_portfolio(Long id_portfolio) {
+        this.id_portfolio = id_portfolio;
+    }
+
+    public String getImagem_url() {
+        return imagem_url;
+    }
+
+    public void setImagem_url(String imagem_url) {
+        this.imagem_url = imagem_url;
     }
 }

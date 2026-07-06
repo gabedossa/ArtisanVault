@@ -19,6 +19,8 @@ public class PedidoRowMapper implements RowMapper<Pedido> {
         pedido.setDt_previsao_entrega(rs.getDate("dt_previsao_entrega"));
         pedido.setEntregue(rs.getBoolean("entregue"));
         pedido.setTrabalhando(rs.getBoolean("trabalhando"));
+        pedido.setId_portfolio(rs.getObject("id_portfolio", Long.class));
+        pedido.setImagem_url(rs.getString("imagem_url"));
         return pedido;
     }
 }
