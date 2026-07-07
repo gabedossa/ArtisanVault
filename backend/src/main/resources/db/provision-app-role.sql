@@ -16,7 +16,7 @@ GRANT USAGE ON SCHEMA public TO artisanvault_app;
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON
   public.artista, public.cliente, public.servico,
-  public.portfolio, public.pedido, public.arte
+  public.portfolio, public.pedido, public.arte, public.email_registro
 TO artisanvault_app;
 
 GRANT USAGE, SELECT ON

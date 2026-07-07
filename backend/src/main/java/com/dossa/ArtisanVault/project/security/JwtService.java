@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
 import javax.crypto.SecretKey;
 import java.util.Base64;
 import java.util.Date;
+import java.util.UUID;
 
 @Component
 public class JwtService {
@@ -27,6 +28,7 @@ public class JwtService {
         Date expiry = new Date(now.getTime() + expirationMs);
 
         return Jwts.builder()
+                .id(UUID.randomUUID().toString())
                 .subject(email)
                 .claim("userType", userType)
                 .claim("userId", userId)

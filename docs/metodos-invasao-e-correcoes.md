@@ -1,6 +1,6 @@
 # ArtisanVault - Metodos de invasao e correcoes
 
-Atualizado em: 2026-07-07
+Atualizado em: 2026-07-07 (inclui rodada de teste de invasao ativo, secao 13)
 
 Este documento descreve os principais caminhos de invasao identificados no projeto ArtisanVault, o status atual de cada ponto e as correcoes recomendadas. O objetivo e defensivo: registrar o que ainda precisa ser corrigido e evitar que controles de seguranca fiquem apenas no frontend.
 
@@ -15,6 +15,7 @@ A maior parte dos pontos praticaveis foi tratada, incluindo provisionar de verda
 - A rotacao de segredos ja expostos (`jwt.secret`, senha do Postgres) tinha sido feita anteriormente (commit `a2573c3`) — o checklist estava desatualizado, nao o codigo.
 - Corrigida colisao/normalizacao de e-mail entre `cliente` e `artista`: `ArtistaService`/`ClienteService` agora bloqueiam e-mail duplicado entre os dois tipos de usuario antes de salvar (`409 Conflict`), e a busca de artista por e-mail passou a ser case-insensitive, no mesmo padrao ja usado por cliente. Migracao Flyway `V2` normaliza os dados existentes e adiciona indices unicos case-insensitive por tabela. Ver secao 12.
 - Restam 2 itens que dependem de infraestrutura de producao que genuinamente nao existe neste projeto (nenhum Redis rodando, nenhum dominio real com HTTPS). O suporte de codigo/configuracao para os dois ja existe e e opcional (desligado por padrao) — falta apenas a infraestrutura real para ativa-lo e validar ponta a ponta. Ver secao abaixo.
+- Rodada de teste de invasao ativo (ataques de verdade contra uma instancia rodando neste ambiente, nao so leitura de codigo) encontrou e corrigiu 3 vulnerabilidades reais: uma race condition que permitia o mesmo e-mail existir simultaneamente em `cliente` e `artista` (contornando a correcao da secao 12.1), cadastro aceitando senha vazia/de 1 caractere direto na API (a validacao so existia no HTML do frontend), e o JWT continuar valido via header `Authorization` mesmo depois de "logout". Ver secao 13 para o que foi tentado, o que resistiu e o que foi corrigido.
 
 Legenda:
 
@@ -217,6 +218,7 @@ O que mudou:
 - Migracao Flyway `V2__email_normalizacao_unicidade.sql` normaliza os e-mails existentes (`LOWER(TRIM(email))`) e cria indices unicos case-insensitive por tabela (`ux_cliente_email_lower`, `ux_artista_email_lower`; a antiga constraint `UNIQUE` case-sensitive de `cliente.email` foi substituida pelo indice). `artista.email` passou a ser `NOT NULL`. Isso cobre duplicatas dentro da mesma tabela sob concorrencia, que a checagem do backend sozinha nao evitaria; a checagem cross-table (cliente vs. artista) continua sendo responsabilidade do backend, ja que Postgres nao suporta constraint de unicidade entre tabelas diferentes.
 - Testado ponta a ponta neste ambiente (Flyway aplicou a migracao no banco de dev real, schema foi para a versao 2): criar cliente com e-mail ja usado por um artista existente retorna `409`; criar artista com e-mail ja usado por um cliente existente retorna `409`; cadastro com e-mail novo continua funcionando (`201`).
 - A solucao mais robusta no longo prazo continua sendo centralizar autenticacao em uma tabela unica de usuario com perfil de cliente/artista separado — fora do escopo desta correcao pontual (mudaria o schema e varios fluxos de autorizacao).
+- **Atualizacao (secao 13.1): a checagem cross-table descrita acima tinha uma race condition e foi substituida por uma tabela `email_registro` com constraint real.** Ver secao 13.1 para os detalhes — o restante desta secao (12.1) descreve o que foi feito nessa rodada anterior, mas o mecanismo de fato usado hoje e o da secao 13.1.
 
 ### 12.2. Normalizacao inconsistente de e-mail
 
@@ -228,6 +230,59 @@ O que mudou:
 - `ArtistaRepository.findByEmail` passou a comparar com `LOWER(email) = ?`, no mesmo padrao ja usado por `ClienteRepository.findByEmail`.
 - `ArtistaService.save`/`update` e `ClienteService.save`/`update` normalizam e persistem o e-mail antes de gravar (antes o valor cru do corpo da requisicao ia direto para o banco).
 - Coberto por testes novos em `ArtistaServiceTest`/`ClienteServiceTest` (normalizacao antes de salvar, colisao de e-mail entre tipos de usuario).
+
+## 13. Teste de invasao ativo
+
+Status: `[RESOLVIDO]` para os 3 achados reais; os demais vetores tentados nao renderam vulnerabilidade.
+
+Diferente das secoes anteriores (leitura de codigo + correcao), esta rodada subiu uma instancia real do backend neste ambiente (porta separada da instancia de desenvolvimento do usuario, que ficou intacta o tempo todo) contra o Postgres de desenvolvimento real, e atacou de verdade via `curl`/`psql`: contas de teste (cliente e artista), tokens JWT de verdade, requisicoes concorrentes de verdade. Toda linha de teste criada foi apagada ao final.
+
+### 13.1. Race condition na unicidade de e-mail entre cliente e artista (CORRIGIDO)
+
+A checagem "consulta as duas tabelas, depois insere" da secao 12.1 (feita na aplicacao, sem nenhuma trava compartilhada entre `ClienteService` e `ArtistaService`) tinha uma janela de corrida. Confirmado disparando 8 requisicoes concorrentes (`POST /api/cliente/post` e `POST /api/artistas` simultaneos, mesmo e-mail): **o mesmo e-mail foi aceito nas duas tabelas ao mesmo tempo**, o exato cenario que a secao 12.1 deveria impedir.
+
+Causa raiz: Postgres nao suporta `UNIQUE` entre tabelas diferentes, e duas requisicoes concorrentes (uma criando cliente, outra criando artista) podem passar pela checagem "o e-mail existe em alguma das duas tabelas?" ao mesmo tempo, antes de qualquer uma commitar seu INSERT.
+
+Correcao: migracao Flyway `V3__registro_email_unico.sql` cria uma tabela `email_registro (email PRIMARY KEY)` com uma linha por e-mail em uso (por qualquer tipo de conta), populada com os dados existentes. `ArtistaService`/`ClienteService.save`/`update`/`deleteById` agora sao `@Transactional` e usam `EmailRegistroRepository.tryReserve`/`release` (um `INSERT`/`DELETE` de verdade nessa tabela) dentro da mesma transacao do `INSERT`/`UPDATE`/`DELETE` em `cliente`/`artista` — o `UNIQUE` real de `email_registro` e o que fecha a janela de corrida, nao mais uma checagem "ler depois escrever" na aplicacao.
+
+Retestado com a mesma requisicao concorrente apos a correcao: de 8 requisicoes simultaneas, exatamente 1 foi aceita (`201`) e as outras 7 (incluindo as do outro tipo de conta) receberam `409`, com `email_registro` e a tabela vencedora com exatamente 1 linha cada.
+
+**Nota operacional encontrada durante o reteste:** como o Flyway roda com um usuario separado (com privilegio de DDL, ex. `postgres`) do usuario de runtime restrito (`artisanvault_app`, so DML), uma tabela nova criada por uma migracao **nao** fica automaticamente acessivel para `artisanvault_app` — e preciso reaplicar o `GRANT` (agora incluido em `db/provision-app-role.sql`) manualmente em qualquer banco que ja tinha o papel restrito provisionado antes desta migracao rodar (o banco de dev deste ambiente precisou disso; um banco novo que rode `provision-app-role.sql` do zero ja pega o `GRANT` atualizado). Vale lembrar disso para qualquer migracao futura que crie tabela nova.
+
+### 13.2. Cadastro aceitava senha vazia/fraca direto na API (CORRIGIDO)
+
+O `minLength={6}` dos formularios de cadastro (`app/cadastro/cliente`, `app/cadastro/artista`) e so validacao HTML no navegador. `ArtistaService.save`/`update` e `ClienteService.save`/`update` nunca validavam o tamanho da senha — confirmado criando uma conta com senha `"1"` e outra com senha `""` diretamente via `POST /api/cliente/post` (sem passar pelo formulario), ambas aceitas (`201`) e capazes de logar em seguida.
+
+Correcao: `ArtistaService`/`ClienteService` agora rejeitam (`WeakPasswordException` → `400`) senha nula ou com menos de 6 caracteres, tanto na criacao quanto na troca de senha no update (o "manter senha atual se o campo vier em branco" continua funcionando sem disparar a validacao). Retestado: senha de 1 caractere e senha vazia agora retornam `400`; senha de 6+ caracteres continua funcionando normalmente.
+
+### 13.3. JWT continuava valido apos logout (CORRIGIDO)
+
+`POST /api/login/logout` sempre so expirou o cookie no navegador — o JWT em si e stateless e continuava criptograficamente valido ate o `exp` original (24h). Confirmado: logando, copiando o token do cookie, chamando `/api/login/logout`, e reusando o mesmo token via header `Authorization: Bearer` — a API continuava autenticando normalmente com o token "deslogado".
+
+Correcao: `JwtService.generateToken` passou a incluir um `jti` (id unico) em cada token. Novo `TokenBlocklistService` (interface + `InMemoryTokenBlocklistService`/`RedisTokenBlocklistService`, mesmo padrao opt-in de `app.token-blocklist.store`/`TOKEN_BLOCKLIST_STORE` usado pelo rate limiter de login) registra o `jti` do token atual no logout, com TTL ate a expiracao original do token. `JwtAuthenticationFilter` passou a rejeitar qualquer token cujo `jti` esteja na blocklist. Tokens emitidos antes desta mudanca (sem `jti`) nao quebram — simplesmente nao se beneficiam da invalidacao no logout ate expirarem naturalmente.
+
+Retestado: o mesmo token que funcionava via `Authorization: Bearer` antes do logout passou a retornar `403` depois do logout.
+
+### 13.4. Vetores tentados que nao renderam vulnerabilidade
+
+Para registrar o que foi testado e resistiu (nao e uma lista exaustiva de tudo que existe, mas cobre os vetores mais comuns e alguns mais elaborados):
+
+- **SQL injection**: todo acesso a banco usa `JdbcTemplate` com `?` parametrizado (confirmado por busca no codigo, sem nenhuma concatenacao de SQL); payloads classicos (`' OR '1'='1`, `'; DROP TABLE cliente; --`) no login nao tiveram efeito.
+- **Falsificacao de JWT**: token com `alg: none` sem assinatura, e token com payload alterado (`CLIENTE` → `ARTISTA`) mas assinatura antiga reaproveitada — ambos rejeitados (`Jwts.parser().verifyWith(key)` exige assinatura valida, biblioteca `jjwt` moderna nao aceita token nao assinado).
+- **IDOR**: testado sistematicamente em todos os controllers (artista, cliente, servico, portfolio, arte, pedido) com uma segunda conta tentando ver/editar/excluir/entregar recursos de outra — todas as tentativas bloqueadas com `403`.
+- **Mass assignment / escalada de privilegio**: setar `tipoUsuario: "ADMIN"` no corpo do `PUT` de artista e aceito e persistido na coluna (ja documentado como risco cosmetico na secao 2), mas confirmado que isso **nao** concede nenhuma autoridade real — o JWT/`ROLE_*` continuam vindo so do que o login resolveu, nao dessa coluna.
+- **Upload de arquivo malicioso**: texto puro, binario `MZ` (executavel Windows) e SVG (`<svg onload=...>`) disfarcados de PNG, arquivo vazio e arquivo de 6MB — todos rejeitados pela validacao de magic bytes/tamanho/formato existente. Nome de arquivo com path traversal (`../../../../windows/win.ini`) e ignorado (o nome salvo sempre e um UUID gerado no servidor).
+- **CSRF**: requisicao de mutacao sem `X-XSRF-TOKEN`, ou com o header presente mas nao correspondente ao cookie, sempre recebeu `403`.
+- **Rate limit / bypass por `X-Forwarded-For`**: apos 5 tentativas de login com senha errada, a 6a (mesmo com a senha certa) recebe `429`; forjar `X-Forwarded-For` nao teve efeito com `TRUST_PROXY_HEADERS=false` (default).
+- **CORS**: preflight com `Origin` arbitrario recebe `403` sem `Access-Control-Allow-Origin`; so `http://localhost:3000` (a origem configurada) recebe os headers de CORS liberando a requisicao.
+- **Vazamento de informacao em erros**: JSON malformado, path variable nao numerico, corpo vazio — nenhum retornou stack trace ou detalhe interno (retornam respostas genericas; ver nota abaixo sobre o efeito colateral encontrado nisso).
+- **Metodos HTTP**: `TRACE` desabilitado pelo Tomcat por padrao; verbos nao mapeados (`PATCH` em rotas sem handler) falham fechado (autenticacao exigida por padrao), nao expondo nada.
+
+**Observacao (nao e vulnerabilidade, so uma inconsistencia de status HTTP):** `/error` nao esta na lista de rotas publicas do `SecurityConfig`, entao quando uma excecao nao tratada forca um forward interno para `/error` (ex.: JSON malformado), o Spring Security barra esse forward para quem nao esta autenticado e devolve `403` com corpo vazio em vez do `400`/`500` que seria mais correto semanticamente. Isso acaba sendo inofensivo por acidente (nenhum detalhe do erro real vaza — a resposta fica ainda mais vazia do que o padrao do Spring Boot), mas fica registrado aqui caso alguem se depare com respostas `403` inesperadas para requisicoes malformadas e queira investigar.
+
+### 13.5. Enumeracao de e-mail via cadastro: avaliado, aceito como risco conhecido
+
+`POST /api/cliente/post`/`POST /api/artistas` respondem `409` com a mensagem "e-mail ja em uso" sem nenhum limite de tentativas proprio (diferente do login, que tem `LoginRateLimiterService`). Isso permite a alguem descobrir se um e-mail especifico ja tem conta na plataforma testando-o direto no endpoint de cadastro. E um padrao comum (muitos sites revelam "e-mail ja cadastrado" no cadastro por motivos de UX) e de severidade baixa comparado aos 3 achados acima — decidido nao aplicar rate limit aqui nesta rodada para nao aumentar o escopo da correcao; fica registrado como risco aceito, nao como pendencia.
 
 ## Checklist atualizado
 
@@ -266,6 +321,9 @@ O que mudou:
 - [x] Tornar `show-sql`, `cookie.secure` e `trust-proxy-headers` configuraveis por ambiente, com defaults seguros de desenvolvimento.
 - [ ] Definir `COOKIE_SECURE=true` no ambiente de producao (exige HTTPS e um dominio real de deploy; exemplo pronto em `deploy/docker-compose.prod.yml`, nao implantado).
 - [x] Adicionar testes de integracao para autorizacao dos controllers (arte, pedido), upload invalido/reencodificacao e rate limit.
+- [x] Fechar a race condition entre a checagem de e-mail duplicado de cliente/artista e o INSERT (tabela `email_registro` com `UNIQUE` real + `@Transactional`, migracao `V3`).
+- [x] Validar tamanho minimo de senha no backend (nao so no HTML do formulario) em cadastro e troca de senha.
+- [x] Invalidar o JWT no logout (blocklist por `jti`, opt-in memoria/Redis), nao so limpar o cookie no navegador.
 
 ## Itens fora do escopo (dependem de infraestrutura real de producao)
 

@@ -1,9 +1,8 @@
 package com.dossa.ArtisanVault.project.service;
 
 import com.dossa.ArtisanVault.project.entity.Artista;
-import com.dossa.ArtisanVault.project.entity.Cliente;
 import com.dossa.ArtisanVault.project.repository.ArtistaRepository;
-import com.dossa.ArtisanVault.project.repository.ClienteRepository;
+import com.dossa.ArtisanVault.project.repository.EmailRegistroRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -11,8 +10,6 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
-
-import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -25,7 +22,7 @@ class ArtistaServiceTest {
     private ArtistaRepository artistaRepository;
 
     @Mock
-    private ClienteRepository clienteRepository;
+    private EmailRegistroRepository emailRegistroRepository;
 
     @Mock
     private PasswordEncoder passwordEncoder;
@@ -46,8 +43,7 @@ class ArtistaServiceTest {
 
     @Test
     void save_criptografaSenhaAntesDeSalvar() {
-        when(artistaRepository.findByEmail("artista@teste.com")).thenReturn(Optional.empty());
-        when(clienteRepository.findByEmail("artista@teste.com")).thenReturn(Optional.empty());
+        when(emailRegistroRepository.tryReserve("artista@teste.com")).thenReturn(true);
         when(passwordEncoder.encode("senhaEmTexto")).thenReturn("senhaCriptografada");
         when(artistaRepository.save(artista)).thenReturn(1);
 
@@ -61,8 +57,7 @@ class ArtistaServiceTest {
     @Test
     void save_normalizaEmailAntesDeSalvar() {
         artista.setEmail("  Artista@Teste.com  ");
-        when(artistaRepository.findByEmail("artista@teste.com")).thenReturn(Optional.empty());
-        when(clienteRepository.findByEmail("artista@teste.com")).thenReturn(Optional.empty());
+        when(emailRegistroRepository.tryReserve("artista@teste.com")).thenReturn(true);
         when(artistaRepository.save(artista)).thenReturn(1);
 
         artistaService.save(artista);
@@ -71,12 +66,21 @@ class ArtistaServiceTest {
     }
 
     @Test
-    void save_emailJaUsadoPorCliente_lancaExcecao() {
-        when(artistaRepository.findByEmail("artista@teste.com")).thenReturn(Optional.empty());
-        when(clienteRepository.findByEmail("artista@teste.com")).thenReturn(Optional.of(new Cliente()));
+    void save_emailJaReservado_lancaExcecao() {
+        when(emailRegistroRepository.tryReserve("artista@teste.com")).thenReturn(false);
 
         assertThatThrownBy(() -> artistaService.save(artista))
                 .isInstanceOf(EmailAlreadyInUseException.class);
+        verify(artistaRepository, never()).save(any());
+    }
+
+    @Test
+    void save_senhaCurta_lancaExcecaoENaoReservaEmail() {
+        artista.setSenha("123");
+
+        assertThatThrownBy(() -> artistaService.save(artista))
+                .isInstanceOf(WeakPasswordException.class);
+        verify(emailRegistroRepository, never()).tryReserve(any());
         verify(artistaRepository, never()).save(any());
     }
 
@@ -94,6 +98,7 @@ class ArtistaServiceTest {
 
         assertThat(artista.getSenha()).isEqualTo("senhaAntigaCriptografada");
         verify(passwordEncoder, never()).encode(anyString());
+        verify(emailRegistroRepository, never()).tryReserve(any());
     }
 
     @Test
@@ -114,17 +119,47 @@ class ArtistaServiceTest {
     }
 
     @Test
-    void update_paraEmailJaUsadoPorCliente_lancaExcecao() {
+    void update_comNovaSenhaCurta_lancaExcecao() {
+        artista.setSenha("123");
+        Artista existente = new Artista();
+        existente.setIdArtista(1L);
+        existente.setEmail("artista@teste.com");
+        existente.setSenha("senhaAntigaCriptografada");
+        when(artistaRepository.findById(1L)).thenReturn(existente);
+
+        assertThatThrownBy(() -> artistaService.update(artista))
+                .isInstanceOf(WeakPasswordException.class);
+        verify(artistaRepository, never()).update(any());
+    }
+
+    @Test
+    void update_paraEmailJaReservado_lancaExcecao() {
         Artista existente = new Artista();
         existente.setIdArtista(1L);
         existente.setEmail("outro@teste.com");
         when(artistaRepository.findById(1L)).thenReturn(existente);
-        when(artistaRepository.findByEmail("artista@teste.com")).thenReturn(Optional.empty());
-        when(clienteRepository.findByEmail("artista@teste.com")).thenReturn(Optional.of(new Cliente()));
+        when(emailRegistroRepository.tryReserve("artista@teste.com")).thenReturn(false);
 
         assertThatThrownBy(() -> artistaService.update(artista))
                 .isInstanceOf(EmailAlreadyInUseException.class);
         verify(artistaRepository, never()).update(any());
+        verify(emailRegistroRepository, never()).release(any());
+    }
+
+    @Test
+    void update_paraNovoEmailLivre_liberaEmailAntigo() {
+        Artista existente = new Artista();
+        existente.setIdArtista(1L);
+        existente.setEmail("outro@teste.com");
+        artista.setSenha("novaSenha");
+        when(artistaRepository.findById(1L)).thenReturn(existente);
+        when(emailRegistroRepository.tryReserve("artista@teste.com")).thenReturn(true);
+        when(passwordEncoder.encode("novaSenha")).thenReturn("novaSenhaCriptografada");
+        when(artistaRepository.update(artista)).thenReturn(1);
+
+        artistaService.update(artista);
+
+        verify(emailRegistroRepository).release("outro@teste.com");
     }
 
     @Test
@@ -134,5 +169,16 @@ class ArtistaServiceTest {
         Artista resultado = artistaService.findById(1L);
 
         assertThat(resultado).isEqualTo(artista);
+    }
+
+    @Test
+    void deleteById_liberaEmailNoRegistro() {
+        when(artistaRepository.findById(1L)).thenReturn(artista);
+        when(artistaRepository.deleteById(1L)).thenReturn(1);
+
+        int linhasAfetadas = artistaService.deleteById(1L);
+
+        assertThat(linhasAfetadas).isEqualTo(1);
+        verify(emailRegistroRepository).release("artista@teste.com");
     }
 }

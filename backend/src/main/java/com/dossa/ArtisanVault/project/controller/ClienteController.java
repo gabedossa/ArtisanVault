@@ -3,6 +3,7 @@ package com.dossa.ArtisanVault.project.controller;
 import com.dossa.ArtisanVault.project.entity.Cliente;
 import com.dossa.ArtisanVault.project.service.ClienteService;
 import com.dossa.ArtisanVault.project.service.EmailAlreadyInUseException;
+import com.dossa.ArtisanVault.project.service.WeakPasswordException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -36,6 +37,8 @@ public class ClienteController {
             }
         } catch (EmailAlreadyInUseException exception) {
             return ResponseEntity.status(HttpStatus.CONFLICT).body(exception.getMessage());
+        } catch (WeakPasswordException exception) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(exception.getMessage());
         }
     }
     // Deletando Artista

@@ -8,7 +8,11 @@ import com.dossa.ArtisanVault.project.service.ArtistaService;
 import com.dossa.ArtisanVault.project.service.ClienteService;
 import com.dossa.ArtisanVault.project.service.LoginRateLimiterService;
 import com.dossa.ArtisanVault.project.service.LoginService;
+import com.dossa.ArtisanVault.project.security.JwtService;
+import com.dossa.ArtisanVault.project.security.TokenBlocklistService;
+import com.dossa.ArtisanVault.project.security.TokenResolver;
 import com.dossa.ArtisanVault.project.util.EmailNormalizer;
+import io.jsonwebtoken.Claims;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -43,6 +47,12 @@ public class LoginController {
 
     @Autowired
     private ClienteService clienteService;
+
+    @Autowired
+    private JwtService jwtService;
+
+    @Autowired
+    private TokenBlocklistService tokenBlocklistService;
 
     @Value("${jwt.expiration-ms}")
     private long expirationMs;
@@ -108,7 +118,9 @@ public class LoginController {
     }
 
     @PostMapping("/logout")
-    public ResponseEntity<?> logout() {
+    public ResponseEntity<?> logout(HttpServletRequest request) {
+        blacklistCurrentToken(request);
+
         ResponseCookie cookie = ResponseCookie.from(COOKIE_NAME, "")
                 .httpOnly(true)
                 .secure(cookieSecure)
@@ -120,6 +132,22 @@ public class LoginController {
         return ResponseEntity.ok()
                 .header(HttpHeaders.SET_COOKIE, cookie.toString())
                 .body("Logout realizado com sucesso.");
+    }
+
+    // O logout so limpa o cookie no navegador - o JWT em si continua
+    // criptograficamente valido ate expirar (stateless), entao alguem com o
+    // token capturado (via Authorization header) poderia reusa-lo mesmo apos o
+    // "logout". Bloquear o jti ate a expiracao original do token fecha essa janela.
+    private void blacklistCurrentToken(HttpServletRequest request) {
+        String token = TokenResolver.resolve(request);
+        if (token == null || !jwtService.isTokenValid(token)) {
+            return;
+        }
+        Claims claims = jwtService.parseClaims(token);
+        String jti = claims.getId();
+        if (jti != null && claims.getExpiration() != null) {
+            tokenBlocklistService.blacklist(jti, claims.getExpiration().getTime());
+        }
     }
 
     private String clientIp(HttpServletRequest request) {

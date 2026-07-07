@@ -2,11 +2,12 @@ package com.dossa.ArtisanVault.project.service;
 
 import com.dossa.ArtisanVault.project.entity.Artista;
 import com.dossa.ArtisanVault.project.repository.ArtistaRepository;
-import com.dossa.ArtisanVault.project.repository.ClienteRepository;
+import com.dossa.ArtisanVault.project.repository.EmailRegistroRepository;
 import com.dossa.ArtisanVault.project.util.EmailNormalizer;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
@@ -14,11 +15,13 @@ import java.util.Optional;
 @Service
 public class ArtistaService {
 
+    private static final int MIN_SENHA_LENGTH = 6;
+
     @Autowired
     private ArtistaRepository artistaRepository;
 
     @Autowired
-    private ClienteRepository clienteRepository;
+    private EmailRegistroRepository emailRegistroRepository;
 
     @Autowired
     private PasswordEncoder passwordEncoder;
@@ -34,9 +37,11 @@ public class ArtistaService {
     }
 
     // Método para criar um novo artista
+    @Transactional
     public int save(Artista artista) {
         String email = EmailNormalizer.normalize(artista.getEmail());
-        if (isEmailTaken(email)) {
+        validateSenha(artista.getSenha());
+        if (!emailRegistroRepository.tryReserve(email)) {
             throw new EmailAlreadyInUseException(email);
         }
         artista.setEmail(email);
@@ -45,25 +50,37 @@ public class ArtistaService {
     }
 
     // Método para atualizar um artista existente
+    @Transactional
     public int update(Artista artista) {
         Artista existing = artistaRepository.findById(artista.getIdArtista());
         String email = EmailNormalizer.normalize(artista.getEmail());
-        if (!email.equals(EmailNormalizer.normalize(existing.getEmail())) && isEmailTaken(email)) {
-            throw new EmailAlreadyInUseException(email);
+        String existingEmail = EmailNormalizer.normalize(existing.getEmail());
+        if (!email.equals(existingEmail)) {
+            if (!emailRegistroRepository.tryReserve(email)) {
+                throw new EmailAlreadyInUseException(email);
+            }
+            emailRegistroRepository.release(existingEmail);
         }
         artista.setEmail(email);
 
         if (artista.getSenha() == null || artista.getSenha().isBlank()) {
             artista.setSenha(existing.getSenha());
         } else {
+            validateSenha(artista.getSenha());
             artista.setSenha(passwordEncoder.encode(artista.getSenha()));
         }
         return artistaRepository.update(artista);
     }
 
     // Método para excluir um artista por ID
+    @Transactional
     public int deleteById(Long id) {
-        return artistaRepository.deleteById(id);
+        Artista existing = artistaRepository.findById(id);
+        int result = artistaRepository.deleteById(id);
+        if (result > 0) {
+            emailRegistroRepository.release(EmailNormalizer.normalize(existing.getEmail()));
+        }
+        return result;
     }
 
     // Método para encontrar um artista por email
@@ -71,10 +88,9 @@ public class ArtistaService {
         return artistaRepository.findByEmail(EmailNormalizer.normalize(email));
     }
 
-    // O mesmo e-mail nao pode existir em cliente nem em artista (login resolve por
-    // e-mail global, procurando cliente antes de artista).
-    private boolean isEmailTaken(String normalizedEmail) {
-        return artistaRepository.findByEmail(normalizedEmail).isPresent()
-                || clienteRepository.findByEmail(normalizedEmail).isPresent();
+    private void validateSenha(String senha) {
+        if (senha == null || senha.length() < MIN_SENHA_LENGTH) {
+            throw new WeakPasswordException();
+        }
     }
 }

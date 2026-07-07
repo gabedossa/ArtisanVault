@@ -1,23 +1,27 @@
 package com.dossa.ArtisanVault.project.service;
 
 import com.dossa.ArtisanVault.project.entity.Cliente;
-import com.dossa.ArtisanVault.project.repository.ArtistaRepository;
 import com.dossa.ArtisanVault.project.repository.ClienteRepository;
+import com.dossa.ArtisanVault.project.repository.EmailRegistroRepository;
 import com.dossa.ArtisanVault.project.util.EmailNormalizer;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
 
 @Service
 public class ClienteService {
+
+    private static final int MIN_SENHA_LENGTH = 6;
+
     @Autowired
     private ClienteRepository clienteRepo;
 
     @Autowired
-    private ArtistaRepository artistaRepository;
+    private EmailRegistroRepository emailRegistroRepository;
 
     @Autowired
     private PasswordEncoder passwordEncoder;
@@ -30,9 +34,11 @@ public class ClienteService {
         return clienteRepo.findById(id);
     }
 
+    @Transactional
     public int save(Cliente cliente){
         String email = EmailNormalizer.normalize(cliente.getEmail());
-        if (isEmailTaken(email)) {
+        validateSenha(cliente.getSenha());
+        if (!emailRegistroRepository.tryReserve(email)) {
             throw new EmailAlreadyInUseException(email);
         }
         cliente.setEmail(email);
@@ -40,21 +46,33 @@ public class ClienteService {
         return clienteRepo.save(cliente);
     }
 
+    @Transactional
     public int deleteById(Long id){
-        return clienteRepo.deleteById(id);
+        Cliente existing = clienteRepo.findById(id);
+        int result = clienteRepo.deleteById(id);
+        if (result > 0) {
+            emailRegistroRepository.release(EmailNormalizer.normalize(existing.getEmail()));
+        }
+        return result;
     }
 
+    @Transactional
     public int update(Cliente cliente) {
         Cliente existing = clienteRepo.findById(cliente.getIdCliente());
         String email = EmailNormalizer.normalize(cliente.getEmail());
-        if (!email.equals(EmailNormalizer.normalize(existing.getEmail())) && isEmailTaken(email)) {
-            throw new EmailAlreadyInUseException(email);
+        String existingEmail = EmailNormalizer.normalize(existing.getEmail());
+        if (!email.equals(existingEmail)) {
+            if (!emailRegistroRepository.tryReserve(email)) {
+                throw new EmailAlreadyInUseException(email);
+            }
+            emailRegistroRepository.release(existingEmail);
         }
         cliente.setEmail(email);
 
         if (cliente.getSenha() == null || cliente.getSenha().isBlank()) {
             cliente.setSenha(existing.getSenha());
         } else {
+            validateSenha(cliente.getSenha());
             cliente.setSenha(passwordEncoder.encode(cliente.getSenha()));
         }
         return clienteRepo.update(cliente);
@@ -64,10 +82,9 @@ public class ClienteService {
         return clienteRepo.findByEmail(EmailNormalizer.normalize(email));
     }
 
-    // O mesmo e-mail nao pode existir em cliente nem em artista (login resolve por
-    // e-mail global, procurando cliente antes de artista).
-    private boolean isEmailTaken(String normalizedEmail) {
-        return clienteRepo.findByEmail(normalizedEmail).isPresent()
-                || artistaRepository.findByEmail(normalizedEmail).isPresent();
+    private void validateSenha(String senha) {
+        if (senha == null || senha.length() < MIN_SENHA_LENGTH) {
+            throw new WeakPasswordException();
+        }
     }
 }
