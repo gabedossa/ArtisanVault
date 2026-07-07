@@ -6,6 +6,7 @@ import org.springframework.web.multipart.MultipartFile;
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -16,11 +17,18 @@ import java.util.UUID;
 @Service
 public class ImageStorageService {
 
+    // WEBP foi removido: o ImageIO do JDK nao tem decoder/encoder nativo para esse
+    // formato, entao nao daria para validar por decodificacao nem reencodar a partir
+    // dos pixels (ver secao 7 de docs/metodos-invasao-e-correcoes.md).
     private static final Map<String, String> ALLOWED_CONTENT_TYPES = Map.of(
             "image/jpeg", ".jpg",
             "image/png", ".png",
-            "image/webp", ".webp",
             "image/gif", ".gif"
+    );
+    private static final Map<String, String> FORMAT_NAMES = Map.of(
+            ".jpg", "jpg",
+            ".png", "png",
+            ".gif", "gif"
     );
     private static final long MAX_SIZE_BYTES = 5L * 1024 * 1024;
 
@@ -35,26 +43,30 @@ public class ImageStorageService {
         }
         String extension = ALLOWED_CONTENT_TYPES.get(file.getContentType());
         if (extension == null) {
-            throw new IllegalArgumentException("Formato de imagem não suportado. Use JPEG, PNG, WEBP ou GIF.");
+            throw new IllegalArgumentException("Formato de imagem não suportado. Use JPEG, PNG ou GIF.");
         }
 
         byte[] bytes = file.getBytes();
         if (!matchesMagicBytes(bytes, extension)) {
             throw new IllegalArgumentException("O conteúdo do arquivo não corresponde a uma imagem válida.");
         }
-        // WEBP não possui decoder nativo no ImageIO do JDK; para os demais formatos,
-        // exigimos que o conteúdo seja realmente decodificável como imagem.
-        if (!".webp".equals(extension)) {
-            BufferedImage image = ImageIO.read(new ByteArrayInputStream(bytes));
-            if (image == null) {
-                throw new IllegalArgumentException("Arquivo não é uma imagem válida.");
-            }
+
+        BufferedImage image = ImageIO.read(new ByteArrayInputStream(bytes));
+        if (image == null) {
+            throw new IllegalArgumentException("Arquivo não é uma imagem válida.");
         }
+
+        // Reencoda a partir dos pixels decodificados (em vez de salvar os bytes
+        // originais) para descartar metadados/payloads residuais do arquivo enviado.
+        // Observação: GIFs animados são reduzidos a um único frame, já que
+        // BufferedImage não preserva animação.
+        ByteArrayOutputStream reencoded = new ByteArrayOutputStream();
+        ImageIO.write(image, FORMAT_NAMES.get(extension), reencoded);
 
         Files.createDirectories(uploadDir);
         String filename = UUID.randomUUID() + extension;
         Path target = uploadDir.resolve(filename);
-        Files.write(target, bytes);
+        Files.write(target, reencoded.toByteArray());
 
         return "/uploads/portfolio/" + filename;
     }
@@ -74,10 +86,6 @@ public class ImageStorageService {
                 return bytes.length >= 6
                         && bytes[0] == 'G' && bytes[1] == 'I' && bytes[2] == 'F'
                         && bytes[3] == '8' && (bytes[4] == '7' || bytes[4] == '9') && bytes[5] == 'a';
-            case ".webp":
-                return bytes.length >= 12
-                        && bytes[0] == 'R' && bytes[1] == 'I' && bytes[2] == 'F' && bytes[3] == 'F'
-                        && bytes[8] == 'W' && bytes[9] == 'E' && bytes[10] == 'B' && bytes[11] == 'P';
             default:
                 return false;
         }

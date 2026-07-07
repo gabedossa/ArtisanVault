@@ -375,10 +375,10 @@ export default function DashboardArtistaPage() {
                     ) : (
                       <>
                         <ImagePlus className="w-8 h-8 text-gray-400 dark:text-gray-500" />
-                        <span className="text-sm text-gray-500 dark:text-gray-400">Clique para escolher uma imagem (JPEG, PNG, WEBP ou GIF, até 5MB)</span>
+                        <span className="text-sm text-gray-500 dark:text-gray-400">Clique para escolher uma imagem (JPEG, PNG ou GIF, até 5MB)</span>
                       </>
                     )}
-                    <input required type="file" accept="image/jpeg,image/png,image/webp,image/gif" onChange={handleImagemChange} className="hidden" />
+                    <input required type="file" accept="image/jpeg,image/png,image/gif" onChange={handleImagemChange} className="hidden" />
                   </label>
                   {newImagemPreview && (
                     <button
@@ -516,10 +516,10 @@ export default function DashboardArtistaPage() {
                     ) : (
                       <>
                         <ImagePlus className="w-8 h-8 text-gray-400 dark:text-gray-500" />
-                        <span className="text-sm text-gray-500 dark:text-gray-400">Clique para escolher uma imagem (JPEG, PNG, WEBP ou GIF, até 5MB)</span>
+                        <span className="text-sm text-gray-500 dark:text-gray-400">Clique para escolher uma imagem (JPEG, PNG ou GIF, até 5MB)</span>
                       </>
                     )}
-                    <input required type="file" accept="image/jpeg,image/png,image/webp,image/gif" onChange={handleDeliverImagemChange} className="hidden" />
+                    <input required type="file" accept="image/jpeg,image/png,image/gif" onChange={handleDeliverImagemChange} className="hidden" />
                   </label>
                   {deliverImagemPreview && (
                     <button
