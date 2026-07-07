@@ -21,6 +21,7 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import java.util.Arrays;
 import java.util.List;
 
 @Configuration
@@ -36,6 +37,17 @@ public class SecurityConfig {
     @Value("${app.cookie.secure:false}")
     private boolean cookieSecure;
 
+    // "Lax" funciona quando frontend e backend sao same-site (ex.: localhost em
+    // dev). Em producao, se frontend e backend ficam em dominios diferentes
+    // (ex.: Vercel + Railway), o navegador so envia o cookie em requisicoes
+    // cross-site se for "None" - o que exige Secure=true (HTTPS).
+    @Value("${app.cookie.same-site:Lax}")
+    private String cookieSameSite;
+
+    // Lista separada por virgula (ex.: "https://meuapp.vercel.app,https://www.meudominio.com").
+    @Value("${app.cors.allowed-origins:http://localhost:3000}")
+    private String allowedOrigins;
+
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
@@ -44,7 +56,10 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOrigins(List.of("http://localhost:3000"));
+        config.setAllowedOrigins(Arrays.stream(allowedOrigins.split(","))
+                .map(String::trim)
+                .filter(origin -> !origin.isEmpty())
+                .toList());
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
         config.setAllowCredentials(true);
@@ -57,7 +72,7 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         CookieCsrfTokenRepository csrfTokenRepository = CookieCsrfTokenRepository.withHttpOnlyFalse();
-        csrfTokenRepository.setCookieCustomizer(cookie -> cookie.secure(cookieSecure).sameSite("Lax"));
+        csrfTokenRepository.setCookieCustomizer(cookie -> cookie.secure(cookieSecure).sameSite(cookieSameSite));
 
         http
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))

@@ -60,6 +60,9 @@ public class LoginController {
     @Value("${app.cookie.secure:false}")
     private boolean cookieSecure;
 
+    @Value("${app.cookie.same-site:Lax}")
+    private String cookieSameSite;
+
     @Value("${app.trust-proxy-headers:false}")
     private boolean trustProxyHeaders;
 
@@ -84,7 +87,7 @@ public class LoginController {
             ResponseCookie cookie = ResponseCookie.from(COOKIE_NAME, response.getToken())
                     .httpOnly(true)
                     .secure(cookieSecure)
-                    .sameSite("Lax")
+                    .sameSite(cookieSameSite)
                     .path("/")
                     .maxAge(expirationMs / 1000)
                     .build();
