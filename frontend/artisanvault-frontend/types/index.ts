@@ -67,7 +67,6 @@ export interface LoginResponse {
   userType: 'ARTISTA' | 'CLIENTE'
   userId: number
   nome: string
-  token: string
 }
 
 export interface AuthUser {

@@ -58,7 +58,7 @@ public class SecurityConfig {
                                 "/api/portifolio", "/api/portifolio/*",
                                 "/uploads/**"
                         ).permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/login", "/api/cliente/post", "/api/artistas").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/login", "/api/login/logout", "/api/cliente/post", "/api/artistas").permitAll()
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

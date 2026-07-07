@@ -1,5 +1,7 @@
 package com.dossa.ArtisanVault.project.dto;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+
 public class LoginResponse {
     private String email;
     private String userType;
@@ -31,6 +33,7 @@ public class LoginResponse {
         return nome;
     }
 
+    @JsonIgnore
     public String getToken() {
         return token;
     }

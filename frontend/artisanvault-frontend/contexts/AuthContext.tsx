@@ -3,6 +3,8 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
 import { AuthUser, LoginRequest } from '@/types'
 import { authService } from '@/lib/services/auth.service'
+import { clienteService } from '@/lib/services/cliente.service'
+import { artistaService } from '@/lib/services/artista.service'
 
 interface AuthContextType {
   user: AuthUser | null
@@ -20,14 +22,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const stored = localStorage.getItem('artisanvault_user')
-    const token = localStorage.getItem('artisanvault_token')
-    if (stored && token) {
-      setUser(JSON.parse(stored))
-    } else if (stored) {
-      localStorage.removeItem('artisanvault_user')
-      localStorage.removeItem('artisanvault_token')
+    if (!stored) {
+      setLoading(false)
+      return
     }
-    setLoading(false)
+
+    const storedUser: AuthUser = JSON.parse(stored)
+
+    // O token vive apenas no cookie httpOnly; validamos a sessão contra o
+    // backend em vez de confiar cegamente no que está no localStorage.
+    const validate =
+      storedUser.userType === 'CLIENTE'
+        ? clienteService.me()
+        : artistaService.findByEmail(storedUser.email)
+
+    validate
+      .then(() => setUser(storedUser))
+      .catch(() => {
+        localStorage.removeItem('artisanvault_user')
+      })
+      .finally(() => setLoading(false))
   }, [])
 
   const login = async (data: LoginRequest) => {
@@ -41,13 +55,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     setUser(authUser)
     localStorage.setItem('artisanvault_user', JSON.stringify(authUser))
-    localStorage.setItem('artisanvault_token', res.token)
   }
 
   const logout = () => {
+    authService.logout().catch(() => {})
     setUser(null)
     localStorage.removeItem('artisanvault_user')
-    localStorage.removeItem('artisanvault_token')
   }
 
   return (
