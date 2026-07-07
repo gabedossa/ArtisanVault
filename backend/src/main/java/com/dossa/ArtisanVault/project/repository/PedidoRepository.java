@@ -33,6 +33,18 @@ public class PedidoRepository {
         }
     }
 
+    //Encontrar pedidos de um cliente
+    public List<Pedido> findByCliente(Long idCliente){
+        String sql = "SELECT * FROM pedido WHERE id_cliente = ?";
+        return jdbcTemplate.query(sql, new PedidoRowMapper(), idCliente);
+    }
+
+    //Encontrar pedidos recebidos por um artista
+    public List<Pedido> findByArtista(Long idArtista){
+        String sql = "SELECT * FROM pedido WHERE id_artista = ?";
+        return jdbcTemplate.query(sql, new PedidoRowMapper(), idArtista);
+    }
+
     //Deletar pedido por id
     public int deleteById(Long id){
         String sql = "DELETE FROM pedido WHERE id_pedido = ?";

@@ -8,7 +8,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
 import java.util.Optional;
 
 @RestController
@@ -17,16 +16,12 @@ public class ClienteController {
     @Autowired
     private ClienteService cliService;
 
-    //Listando Artista
-    @GetMapping
-    public List<Cliente> getAllArtistas(){
-        return cliService.findAll();
-    }
-
-    //Listando Artista por id
-    @GetMapping("/{id}")
-    public Cliente findById(@PathVariable Long id){
-        return cliService.findById(id);
+    //Retorna os dados do proprio cliente autenticado
+    @GetMapping("/me")
+    public ResponseEntity<?> me(Authentication authentication) {
+        Optional<Cliente> cliente = cliService.findByEmail(authentication.getName());
+        return cliente.<ResponseEntity<?>>map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND).body("Cliente não encontrado."));
     }
 
     @PostMapping("/post")

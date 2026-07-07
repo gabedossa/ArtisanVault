@@ -2,24 +2,19 @@ import api from '../api'
 import { Pedido, Portifolio } from '@/types'
 
 export const pedidoService = {
-  async findAll(): Promise<Pedido[]> {
-    const res = await api.get<Pedido[]>('/pedido')
-    return res.data
-  },
-
   async findById(id: number): Promise<Pedido> {
     const res = await api.get<Pedido>(`/pedido/${id}`)
     return res.data
   },
 
-  async findByCliente(idCliente: number): Promise<Pedido[]> {
-    const all = await pedidoService.findAll()
-    return all.filter((p) => p.id_cliente === idCliente)
+  async findByCliente(): Promise<Pedido[]> {
+    const res = await api.get<Pedido[]>('/pedido/meus')
+    return res.data
   },
 
-  async findByArtista(idArtista: number): Promise<Pedido[]> {
-    const all = await pedidoService.findAll()
-    return all.filter((p) => p.id_artista === idArtista)
+  async findByArtista(): Promise<Pedido[]> {
+    const res = await api.get<Pedido[]>('/pedido/recebidos')
+    return res.data
   },
 
   async create(data: { id_servico: number; descricao: string }): Promise<Pedido> {

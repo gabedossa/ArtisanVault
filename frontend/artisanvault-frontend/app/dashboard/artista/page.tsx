@@ -65,7 +65,7 @@ export default function DashboardArtistaPage() {
       artistaService.findById(id),
       portifolioService.findByArtista(id),
       servicoService.findByArtista(id),
-      pedidoService.findByArtista(id),
+      pedidoService.findByArtista(),
     ])
       .then(([a, p, s, ped]) => {
         setArtista(a)

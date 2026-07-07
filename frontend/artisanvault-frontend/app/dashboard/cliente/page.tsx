@@ -30,8 +30,8 @@ export default function DashboardClientePage() {
   useEffect(() => {
     if (!user?.userId) return
     Promise.all([
-      clienteService.findById(user.userId),
-      pedidoService.findByCliente(user.userId),
+      clienteService.me(),
+      pedidoService.findByCliente(),
     ])
       .then(([c, ped]) => {
         setCliente(c)

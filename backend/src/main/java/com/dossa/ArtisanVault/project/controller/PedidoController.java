@@ -22,7 +22,6 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.util.Date;
-import java.util.List;
 import java.util.Optional;
 
 @RestController
@@ -46,16 +45,43 @@ public class PedidoController {
     @Autowired
     private ImageStorageService imageStorageService;
 
-    //Listando pedido
-    @GetMapping
-    public List<Pedido> findAlls(){
-        return pedidoService.findAll();
+    //Listando pedido por id (somente cliente ou artista donos do pedido)
+    @GetMapping("/{id}")
+    public ResponseEntity<?> findById(@PathVariable Long id, Authentication authentication){
+        Pedido pedido = pedidoService.findById(id);
+        if (pedido == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Pedido não encontrado.");
+        }
+
+        Optional<Cliente> clienteOpt = clienteService.findByEmail(authentication.getName());
+        Optional<Artista> artistaOpt = artistaService.findByEmail(authentication.getName());
+        boolean donoCliente = clienteOpt.isPresent() && pedido.getId_cliente().equals(clienteOpt.get().getIdCliente());
+        boolean donoArtista = artistaOpt.isPresent() && pedido.getId_artista().equals(artistaOpt.get().getIdArtista());
+
+        if (!donoCliente && !donoArtista) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Você não pode ver este pedido.");
+        }
+        return ResponseEntity.ok(pedido);
     }
 
-    //Listando pedido por id
-    @GetMapping("/{id}")
-    public Pedido findById(@PathVariable Long id){
-        return pedidoService.findById(id);
+    //Pedidos feitos pelo cliente autenticado
+    @GetMapping("/meus")
+    public ResponseEntity<?> meusPedidos(Authentication authentication) {
+        Optional<Cliente> clienteOpt = clienteService.findByEmail(authentication.getName());
+        if (clienteOpt.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Cliente não encontrado.");
+        }
+        return ResponseEntity.ok(pedidoService.findByCliente(clienteOpt.get().getIdCliente()));
+    }
+
+    //Pedidos recebidos pelo artista autenticado
+    @GetMapping("/recebidos")
+    public ResponseEntity<?> pedidosRecebidos(Authentication authentication) {
+        Optional<Artista> artistaOpt = artistaService.findByEmail(authentication.getName());
+        if (artistaOpt.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Artista não encontrado.");
+        }
+        return ResponseEntity.ok(pedidoService.findByArtista(artistaOpt.get().getIdArtista()));
     }
 
     //Cliente solicita um serviço a um artista

@@ -18,6 +18,14 @@ public class PedidoService {
         return pedidoRepo.findById(id);
     }
 
+    public List<Pedido> findByCliente(Long idCliente){
+        return pedidoRepo.findByCliente(idCliente);
+    }
+
+    public List<Pedido> findByArtista(Long idArtista){
+        return pedidoRepo.findByArtista(idArtista);
+    }
+
     public Pedido save(Pedido pedido){
         return pedidoRepo.save(pedido);
     }

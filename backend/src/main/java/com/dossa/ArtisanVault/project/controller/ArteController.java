@@ -41,15 +41,23 @@ public class ArteController {
 
     //Criando Arte
     @PostMapping("/post")
-    public ResponseEntity<String> createArte(@RequestBody Arte arte){
+    public ResponseEntity<String> createArte(@RequestBody Arte arte, Authentication authentication){
+        Portifolio portifolio = portifolioService.findById(arte.getId_portfolio());
+        if (portifolio == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Portfolio não encontrado.");
+        }
+
+        Optional<Artista> artistaOpt = artistaService.findByEmail(authentication.getName());
+        if (artistaOpt.isEmpty() || !portifolio.getId_artista().equals(artistaOpt.get().getIdArtista())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Você só pode criar artes nos seus próprios portfolios.");
+        }
+
         int result= artService.save(arte);
         if (result > 0){
             return ResponseEntity.status(HttpStatus.CREATED).body("Arte criado com sucesso");
         } else{
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Erro ao criar arte");
         }
-
-
     }
     // Deletando Arte
     @DeleteMapping("/delete/{id}")
