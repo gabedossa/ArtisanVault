@@ -74,6 +74,20 @@ jwt.secret=a_base64_secret_of_at_least_256_bits
 
 This file is never committed — secrets stay out of version control.
 
+The schema is versioned with Flyway (`backend/src/main/resources/db/migration`) and runs
+automatically on startup. By default everything uses the same Postgres user (`postgres`).
+To run the app with a minimal-privilege user instead (recommended outside local dev), run
+`backend/src/main/resources/db/provision-app-role.sql` as a superuser and configure:
+
+```properties
+spring.datasource.username=artisanvault_app
+spring.datasource.password=the_password_you_set_in_the_script
+
+# migrations still run with a DDL-privileged user
+spring.flyway.user=postgres
+spring.flyway.password=your_postgres_password
+```
+
 Start the application:
 
 ```bash

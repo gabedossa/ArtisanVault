@@ -74,6 +74,21 @@ jwt.secret=um_segredo_base64_de_pelo_menos_256_bits
 
 Esse arquivo nunca é commitado — os segredos ficam fora do controle de versão.
 
+O schema é versionado pelo Flyway (`backend/src/main/resources/db/migration`) e roda
+automaticamente ao subir a aplicação. Por padrão, tudo usa o mesmo usuário do Postgres
+(`postgres`). Para rodar a aplicação com um usuário de privilégio mínimo (recomendado
+fora do ambiente de desenvolvimento), rode
+`backend/src/main/resources/db/provision-app-role.sql` como superusuário e configure:
+
+```properties
+spring.datasource.username=artisanvault_app
+spring.datasource.password=a_senha_que_voce_definiu_no_script
+
+# migrações continuam rodando com um usuário com privilégio de DDL
+spring.flyway.user=postgres
+spring.flyway.password=sua_senha_do_postgres
+```
+
 Suba a aplicação:
 
 ```bash

@@ -1,2 +1,13 @@
+# Senha do usuario configurado em spring.datasource.username (application.properties).
+# Recomendado: um usuario com privilegio minimo (so SELECT/INSERT/UPDATE/DELETE
+# nas tabelas da aplicacao), nao o superusuario do Postgres. Veja
+# db/migration/README.md ou o script de exemplo para criar esse usuario.
 spring.datasource.password=troque-pela-senha-real-do-seu-postgres
+
+# O Flyway roda as migracoes com um usuario a parte, que precisa de privilegio
+# de DDL (CREATE TABLE etc.). Se o usuario do datasource principal ja tiver
+# esse privilegio (ex.: postgres), pode remover estas duas linhas.
+spring.flyway.user=postgres
+spring.flyway.password=troque-pela-senha-real-do-seu-postgres
+
 jwt.secret=troque-por-um-segredo-base64-de-pelo-menos-256-bits
