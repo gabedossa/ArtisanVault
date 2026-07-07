@@ -1,15 +1,16 @@
 import { Pedido } from '@/types'
-import { ShoppingBag, Calendar, CheckCircle, Clock, Loader, Trash2, Upload } from 'lucide-react'
+import { ShoppingBag, Calendar, CheckCircle, Clock, Loader, Trash2, Upload, Play } from 'lucide-react'
 import { API_ORIGIN } from '@/lib/api'
 
 interface Props {
   pedido: Pedido
   onDelete?: (id: number) => void
   onDeliver?: (pedido: Pedido) => void
+  onIniciar?: (pedido: Pedido) => void
   isOwner?: boolean
 }
 
-export default function PedidoCard({ pedido, onDelete, onDeliver, isOwner }: Props) {
+export default function PedidoCard({ pedido, onDelete, onDeliver, onIniciar, isOwner }: Props) {
   const status = pedido.entregue
     ? { label: 'Entregue', color: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400', icon: CheckCircle }
     : pedido.trabalhando
@@ -62,6 +63,14 @@ export default function PedidoCard({ pedido, onDelete, onDeliver, isOwner }: Pro
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          {isOwner && onIniciar && !pedido.trabalhando && !pedido.entregue && (
+            <button
+              onClick={() => onIniciar(pedido)}
+              className="flex items-center gap-1 bg-blue-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              <Play className="w-3.5 h-3.5" /> Iniciar trabalho
+            </button>
+          )}
           {isOwner && onDeliver && !pedido.entregue && (
             <button
               onClick={() => onDeliver(pedido)}

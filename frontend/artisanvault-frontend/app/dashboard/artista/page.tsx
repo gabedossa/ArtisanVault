@@ -133,6 +133,11 @@ export default function DashboardArtistaPage() {
     setPedidos((prev) => prev.filter((p) => p.id_pedido !== id))
   }
 
+  const handleIniciarPedido = async (pedido: Pedido) => {
+    const atualizado = await pedidoService.iniciar(pedido.id_pedido)
+    setPedidos((prev) => prev.map((p) => (p.id_pedido === atualizado.id_pedido ? atualizado : p)))
+  }
+
   const handleDeliverImagemChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] ?? null
     setDeliverImagem(file)
@@ -554,7 +559,7 @@ export default function DashboardArtistaPage() {
               {pedidos.length > 0 ? (
                 <div className="space-y-3">
                   {pedidos.map((p) => (
-                    <PedidoCard key={p.id_pedido} pedido={p} isOwner onDelete={handleDeletePedido} onDeliver={setDeliveringPedido} />
+                    <PedidoCard key={p.id_pedido} pedido={p} isOwner onDelete={handleDeletePedido} onDeliver={setDeliveringPedido} onIniciar={handleIniciarPedido} />
                   ))}
                 </div>
               ) : (

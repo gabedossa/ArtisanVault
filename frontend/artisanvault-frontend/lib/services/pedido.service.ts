@@ -27,6 +27,11 @@ export const pedidoService = {
     return res.data
   },
 
+  async iniciar(id: number): Promise<Pedido> {
+    const res = await api.put<Pedido>(`/pedido/${id}/iniciar`)
+    return res.data
+  },
+
   async entregar(
     id: number,
     data: { titulo: string; descricao: string; imagem: File }
