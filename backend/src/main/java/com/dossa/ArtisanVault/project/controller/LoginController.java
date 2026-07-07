@@ -2,6 +2,10 @@ package com.dossa.ArtisanVault.project.controller;
 
 import com.dossa.ArtisanVault.project.dto.LoginRequest;
 import com.dossa.ArtisanVault.project.dto.LoginResponse;
+import com.dossa.ArtisanVault.project.entity.Artista;
+import com.dossa.ArtisanVault.project.entity.Cliente;
+import com.dossa.ArtisanVault.project.service.ArtistaService;
+import com.dossa.ArtisanVault.project.service.ClienteService;
 import com.dossa.ArtisanVault.project.service.LoginRateLimiterService;
 import com.dossa.ArtisanVault.project.service.LoginService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -12,11 +16,15 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/login")
@@ -29,11 +37,20 @@ public class LoginController {
     @Autowired
     private LoginRateLimiterService rateLimiterService;
 
+    @Autowired
+    private ArtistaService artistaService;
+
+    @Autowired
+    private ClienteService clienteService;
+
     @Value("${jwt.expiration-ms}")
     private long expirationMs;
 
     @Value("${app.cookie.secure:false}")
     private boolean cookieSecure;
+
+    @Value("${app.trust-proxy-headers:false}")
+    private boolean trustProxyHeaders;
 
     @PostMapping
     public ResponseEntity<?> authenticateUser(@RequestBody LoginRequest loginRequest, HttpServletRequest request) {
@@ -70,6 +87,25 @@ public class LoginController {
         }
     }
 
+    @GetMapping("/me")
+    public ResponseEntity<?> me(Authentication authentication) {
+        String email = authentication.getName();
+        boolean isArtista = authentication.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_ARTISTA"));
+
+        if (isArtista) {
+            Optional<Artista> artista = artistaService.findByEmail(email);
+            return artista
+                    .<ResponseEntity<?>>map(a -> ResponseEntity.ok(new LoginResponse(a.getEmail(), "ARTISTA", a.getIdArtista(), a.getNome(), null)))
+                    .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND).body("Artista não encontrado."));
+        }
+
+        Optional<Cliente> cliente = clienteService.findByEmail(email);
+        return cliente
+                .<ResponseEntity<?>>map(c -> ResponseEntity.ok(new LoginResponse(c.getEmail(), "CLIENTE", c.getIdCliente(), c.getNome(), null)))
+                .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND).body("Cliente não encontrado."));
+    }
+
     @PostMapping("/logout")
     public ResponseEntity<?> logout() {
         ResponseCookie cookie = ResponseCookie.from(COOKIE_NAME, "")
@@ -86,9 +122,11 @@ public class LoginController {
     }
 
     private String clientIp(HttpServletRequest request) {
-        String forwarded = request.getHeader("X-Forwarded-For");
-        if (forwarded != null && !forwarded.isBlank()) {
-            return forwarded.split(",")[0].trim();
+        if (trustProxyHeaders) {
+            String forwarded = request.getHeader("X-Forwarded-For");
+            if (forwarded != null && !forwarded.isBlank()) {
+                return forwarded.split(",")[0].trim();
+            }
         }
         return request.getRemoteAddr();
     }

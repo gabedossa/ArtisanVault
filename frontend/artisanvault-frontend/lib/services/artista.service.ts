@@ -12,11 +12,6 @@ export const artistaService = {
     return res.data
   },
 
-  async findByEmail(email: string): Promise<Artista> {
-    const res = await api.get<Artista>('/artistas/email', { params: { email } })
-    return res.data
-  },
-
   async create(artista: Omit<Artista, 'idArtista'>): Promise<Artista> {
     const res = await api.post<Artista>('/artistas', artista)
     return res.data
@@ -29,12 +24,5 @@ export const artistaService = {
 
   async delete(id: number): Promise<void> {
     await api.delete(`/artistas/${id}`)
-  },
-
-  async login(email: string, senha: string): Promise<string> {
-    const res = await api.post<string>('/artistas/login', null, {
-      params: { email, senha },
-    })
-    return res.data
   },
 }
