@@ -6,13 +6,14 @@ Este documento descreve os principais caminhos de invasao identificados no proje
 
 ## Status geral
 
-Todos os pontos praticaveis dentro do repositorio (sem depender de infraestrutura real de producao) foram tratados. Isso inclui os itens desta rodada:
+Todos os pontos praticaveis foram tratados, incluindo provisionar de verdade um usuario de banco com privilegio minimo neste ambiente (nao apenas documentar a ideia):
 
-- `GET /api/artistas/me` nao existia como tal; em vez disso, foi criado `GET /api/login/me`, que resolve a identidade autenticada (e-mail/tipo/id/nome) direto do backend a partir do JWT, cobrindo tanto artista quanto cliente. O frontend (`AuthContext.tsx`) parou de usar `localStorage` para reconstruir a identidade da sessao e passou a chamar esse endpoint a cada carregamento.
-- Investigadas as entidades expostas diretamente pela API (`Artista`, `Cliente`, `Portifolio`, `Servico`, `Arte`, `Pedido`): a unica exposicao publica indevida encontrada foi `id_cliente`/`id_pedido` em `GET /api/portifolio` e `GET /api/portifolio/{id}`, que ja foi corrigida com um DTO publico dedicado. Os demais casos (`Cliente`, `Pedido`) so sao retornados para o proprio dono depois das correcoes anteriores, e `senha` ja e `@JsonProperty(WRITE_ONLY)` em `Artista`/`Cliente`. Ver secao 2/3 para o detalhamento e a justificativa de nao criar DTOs onde nao ha exposicao real.
-- Removido `artistaService.login(email, senha)` do frontend: metodo morto que chamava `/api/artistas/login`, endpoint que nunca existiu no backend (nunca era invocado por nenhuma tela).
-- O rate limit de login agora so confia no header `X-Forwarded-For` quando `TRUST_PROXY_HEADERS=true` estiver definido; por padrao usa o IP real da conexao TCP, evitando que um cliente falsifique o header para contornar o limite por IP.
-- Adicionados testes automatizados de seguranca: autorizacao (dono/nao-dono/nao-encontrado) em `ArteController` e `PedidoController`, validacao de upload invalido/valido em `ImageStorageService`, e comportamento do rate limiter em `LoginRateLimiterService`.
+- Imagens de portfolio agora sao reencodadas a partir dos pixels decodificados (`ImageIO.write`) em vez de salvar os bytes originais, descartando qualquer metadado/payload residual anexado ao arquivo. WEBP foi removido da lista de formatos aceitos (backend e frontend), ja que o `ImageIO` do JDK nao tem encoder para esse formato e nao daria para reencodar com seguranca.
+- Protecao CSRF explicita adicionada via `CookieCsrfTokenRepository` (cookie `XSRF-TOKEN` legivel por JS + header `X-XSRF-TOKEN`), o padrao recomendado pelo proprio Spring Security para SPAs com cookie de sessao. `POST /api/login` e `POST /api/login/logout` ficam de fora da checagem (nao ha autoridade ambiente para um CSRF abusar antes do login existir). O frontend (axios) foi configurado para enviar o header automaticamente.
+- Adotado Flyway com uma migracao baseline (`V1__baseline.sql`) que reflete o schema real atual. `spring.jpa.hibernate.ddl-auto` passou a ser `validate` por padrao em todos os ambientes — mudancas de schema agora devem ser feitas criando uma nova migracao versionada, nao deixando o Hibernate alterar tabelas silenciosamente.
+- Criado o papel Postgres `artisanvault_app` com privilegio minimo (`db/provision-app-role.sql`), com Flyway rodando via um usuario separado (com privilegio de DDL) atraves de `spring.flyway.user`/`password`. Testado ponta a ponta neste ambiente: login, CRUD via API e bloqueio de `CREATE TABLE`/acesso a tabelas nao relacionadas para o papel restrito.
+- A rotacao de segredos ja expostos (`jwt.secret`, senha do Postgres) tinha sido feita anteriormente (commit `a2573c3`) — o checklist estava desatualizado, nao o codigo.
+- Restam apenas 2 itens que dependem de infraestrutura de producao que genuinamente nao existe neste projeto (nenhum Redis rodando, nenhum dominio real com HTTPS) — ver secao abaixo.
 
 Legenda:
 
@@ -23,13 +24,10 @@ Legenda:
 
 ## O que ainda falta ajustar
 
-Itens genuinamente pendentes, todos dependentes de infraestrutura real ou de uma decisao de produto que ainda nao existe neste projeto:
+Os unicos itens genuinamente pendentes dependem de infraestrutura que nao existe neste ambiente (nao ha como provisionar um Redis ou um dominio com HTTPS real dentro do repositorio):
 
-1. `[PENDENTE]` Reprocessar/reencodar todas as imagens do zero antes de salvar. WEBP nao tem decoder nativo no `ImageIO` do JDK, entao hoje so tem validacao por assinatura binaria para esse formato (ver secao 7).
-2. `[PENDENTE]` Adicionar protecao CSRF explicita **se** a politica de cookie mudar (`SameSite=None`, subdominios, etc.). Hoje `SameSite=Lax` ja mitiga o cenario atual de origem unica.
-3. `[PENDENTE]` Migrar o rate limit para armazenamento distribuido (Redis/Bucket4j) se o backend passar a rodar em multiplas instancias atras de um load balancer.
-4. `[PENDENTE]` Fechar configuracao real de producao: rotacionar segredos antigos, criar usuario de banco com privilegios minimos, definir `DDL_AUTO=validate`, `SHOW_SQL=false`, `COOKIE_SECURE=true`, `TRUST_PROXY_HEADERS=true` (se houver proxy confiavel na frente) e servir tudo por HTTPS.
-5. `[PENDENTE]` Adotar migracoes versionadas (Flyway/Liquibase) antes de producao real, e manter auditoria recorrente de dependencias (`npm audit`, Maven/OSV ou equivalente em CI).
+1. `[PENDENTE]` Migrar o rate limit para armazenamento distribuido (Redis/Bucket4j) se o backend passar a rodar em multiplas instancias atras de um load balancer.
+2. `[PENDENTE]` Servir a aplicacao por HTTPS real e definir `COOKIE_SECURE=true` contra esse dominio de producao.
 
 ## 1. Exposicao publica de endpoints GET
 
@@ -83,25 +81,28 @@ Status: `[RESOLVIDO]`.
 
 ## 7. Upload de arquivos baseado apenas em Content-Type
 
-Status: `[RESOLVIDO]` para validacao de conteudo; `[PARCIAL]` para reprocessamento completo.
+Status: `[RESOLVIDO]`.
 
 ### O que mudou
 
 `ImageStorageService.store` agora:
 
 1. Le os bytes do arquivo em memoria.
-2. Valida a assinatura binaria (magic bytes) de JPEG, PNG, GIF e WEBP contra o `Content-Type` declarado.
-3. Para JPEG/PNG/GIF (formatos com decoder nativo no `ImageIO` do JDK), decodifica a imagem via `ImageIO.read` e rejeita se o resultado for nulo.
-4. Salva os bytes validados em disco com nome gerado por `UUID`.
+2. Valida a assinatura binaria (magic bytes) de JPEG, PNG e GIF contra o `Content-Type` declarado.
+3. Decodifica a imagem via `ImageIO.read` e rejeita se o resultado for nulo.
+4. **Reencoda a imagem a partir dos pixels decodificados** (`ImageIO.write`) e salva esse resultado em disco — nao os bytes originais enviados pelo cliente. Isso descarta qualquer metadado ou payload residual anexado ao arquivo (testado explicitamente: um PNG valido com dados arbitrarios anexados apos o fim da imagem tem esses dados removidos no arquivo salvo).
 
 `X-Content-Type-Options: nosniff` ja e enviado por padrao pelo Spring Security em todas as respostas, incluindo `/uploads/**`, sem necessidade de configuracao adicional.
 
-Testes automatizados em `ImageStorageServiceTest` cobrem: conteudo que nao e imagem real (rejeitado mesmo com `Content-Type` de imagem), PNG valido (aceito), `Content-Type` nao suportado (rejeitado) e arquivo vazio (rejeitado).
+Testes automatizados em `ImageStorageServiceTest` cobrem: conteudo que nao e imagem real (rejeitado mesmo com `Content-Type` de imagem), PNG valido (aceito), `Content-Type` nao suportado (rejeitado), arquivo vazio (rejeitado) e remocao de dados anexados via reencodificacao.
+
+### WEBP removido
+
+WEBP foi removido da lista de formatos aceitos (`ImageStorageService` no backend; `accept` dos inputs de arquivo no frontend). O `ImageIO` do JDK nao tem encoder nativo para WEBP, entao nao daria para cumprir a mesma garantia de reencodificacao para esse formato sem adicionar uma biblioteca externa — e melhor recusar o formato do que aceita-lo com uma garantia de seguranca mais fraca que os demais.
 
 ### Risco remanescente
 
-- WEBP nao possui decoder nativo no `ImageIO` do JDK sem plugin adicional; para esse formato a validacao fica restrita a assinatura binaria (nao ha decodificacao completa).
-- O arquivo original validado e salvo como está (sem re-encodar a imagem do zero). Reencodar todas as imagens re-processando pixels removeria metadados/payloads residuais com uma camada extra de seguranca, mas exigiria lidar com a limitacao do WEBP acima (provavelmente descartando esse formato ou adicionando uma biblioteca externa). Pode ser feito como uma melhoria futura caso uploads de terceiros nao confiaveis passem a ser um vetor mais critico.
+GIFs animados sao reduzidos a um unico frame ao reencodar, ja que `BufferedImage` nao preserva animacao. Aceitavel para o caso de uso (portfolio de arte), mas vale documentar caso animacao vire um requisito no futuro.
 
 ## 8. JWT em localStorage
 
@@ -112,12 +113,14 @@ Status: `[RESOLVIDO]`.
 - `POST /api/login` agora define o JWT em um cookie `HttpOnly`, `SameSite=Lax`, `Path=/`, com `Secure` controlado pela variavel de ambiente `COOKIE_SECURE` (usar `true` atras de HTTPS em producao). O corpo da resposta (`LoginResponse`) nao inclui mais o token (`@JsonIgnore`), entao nem o proprio JavaScript da aplicacao consegue le-lo.
 - `JwtAuthenticationFilter` aceita o token tanto via header `Authorization: Bearer` (compatibilidade) quanto via cookie `artisanvault_token`.
 - Novo endpoint `POST /api/login/logout` expira o cookie no servidor.
-- Novo endpoint `GET /api/login/me` retorna a identidade autenticada (e-mail/tipo/id/nome) resolvida no backend a partir do JWT. O frontend (`AuthContext.tsx`) usa esse endpoint como unica fonte de verdade da sessao: nao ha mais `localStorage.setItem`/`getItem` para dados de usuario em nenhum lugar do app. A cada carregamento de pagina, a identidade e buscada do backend; se o cookie for invalido/expirado, o usuario simplesmente aparece como nao autenticado.
+- Novo endpoint `GET /api/login/me` retorna a identidade autenticada (e-mail/tipo/id/nome) resolvida no backend a partir do JWT. O frontend (`AuthContext.tsx`) usa esse endpoint como fonte de verdade da sessao e nao grava mais dados de usuario no navegador. `login()` retorna o `AuthUser` resolvido pelo backend, e `app/login/page.tsx` usa esse retorno para decidir o redirecionamento pos-login, sem ler `localStorage` em nenhum ponto do fluxo.
 - `withCredentials: true` foi mantido (agora e o mecanismo real de transporte do cookie).
 
-### Risco remanescente
+### CSRF: resolvido
 
-CSRF classico e mitigado por `SameSite=Lax` (cookies nao sao enviados em POST/PUT/DELETE disparados por outro site), mas nao ha um token CSRF explicito. Se o app crescer para múltiplos subdominios ou precisar de `SameSite=None`, adicionar protecao CSRF explicita (dupla submissao de cookie ou header customizado) deve ser revisitado.
+`SecurityConfig` habilita `CookieCsrfTokenRepository.withHttpOnlyFalse()` (cookie `XSRF-TOKEN`, `Secure` alinhado com `COOKIE_SECURE`, `SameSite=Lax`) com `CsrfTokenRequestAttributeHandler`, mais um `CsrfCookieFilter` (`OncePerRequestFilter`) que forca a resolucao preguicosa do token em toda requisicao — o padrao oficial do Spring Security para SPAs stateless. `POST /api/login` e `POST /api/login/logout` ficam fora da checagem, ja que nao operam sobre uma sessao ja autenticada (nao ha autoridade ambiente para um CSRF abusar). O frontend (`api.ts`) habilita `withXSRFToken: true` no axios, necessario porque backend e frontend rodam em origens diferentes (portas distintas) e o axios so anexa o header `X-XSRF-TOKEN` automaticamente para requisicoes cross-origin quando isso e habilitado explicitamente.
+
+Testado manualmente ponta a ponta: requisicao de mutacao sem o header `X-XSRF-TOKEN` recebe `403`; com o header correspondente ao cookie, é aceita normalmente (login continua funcionando sem o header, por estar na lista de ignorados).
 
 ## 9. Login sem rate limit
 
@@ -131,7 +134,7 @@ O IP usado na chave de rate limit so vem do header `X-Forwarded-For` quando `TRU
 
 ### Risco remanescente
 
-A implementacao e em memoria (nao distribuida). Se o backend rodar em multiplas instancias atras de um load balancer, cada instancia tera seu proprio contador. Para esse cenario, migrar para Redis (ex.: Bucket4j + Redis) seria o proximo passo natural.
+A implementacao e em memoria (nao distribuida). Se o backend rodar em multiplas instancias atras de um load balancer, cada instancia tera seu proprio contador. Para esse cenario, migrar para Redis (ex.: Bucket4j + Redis) seria o proximo passo natural — depende de ter um Redis disponivel no ambiente de deploy, que nao existe neste projeto hoje.
 
 ## 10. Dependencias vulneraveis
 
@@ -151,7 +154,8 @@ Backend (`pom.xml`):
 
 - `spring-boot-starter-parent` atualizado de `3.3.2` para `3.5.16` (ultima versao estavel da linha 3.5.x; evitamos o salto para a major 4.x para nao introduzir mudancas de API/arquitetura fora do escopo desta auditoria).
 - Removidas as versoes fixadas de `org.postgresql:postgresql` e `org.hibernate.orm:hibernate-core`, que agora seguem o BOM do Spring Boot (Postgres JDBC `42.7.11`, Hibernate `6.6.53.Final`), evitando divergencia futura do BOM.
-- Suite de testes (`./mvnw test`) executada com sucesso: 34/34 testes passando (13 originais + 21 novos de seguranca).
+- Adicionado `flyway-core` + `flyway-database-postgresql` (ver secao 11).
+- Suite de testes (`./mvnw test`) executada com sucesso: 35/35 testes passando.
 
 ### Observacao
 
@@ -167,18 +171,36 @@ Status: `[RESOLVIDO]` para os itens que dependem apenas de codigo/configuracao d
 
 ```properties
 spring.datasource.username=${DB_USERNAME:postgres}
-spring.jpa.hibernate.ddl-auto=${DDL_AUTO:update}
+spring.jpa.hibernate.ddl-auto=${DDL_AUTO:validate}
 spring.jpa.show-sql=${SHOW_SQL:true}
 app.cookie.secure=${COOKIE_SECURE:false}
 app.trust-proxy-headers=${TRUST_PROXY_HEADERS:false}
 ```
 
-Em producao, basta definir `DB_USERNAME` (usuario com privilegios minimos), `DDL_AUTO=validate`, `SHOW_SQL=false`, `COOKIE_SECURE=true` (exige HTTPS) e `TRUST_PROXY_HEADERS=true` (somente se houver um proxy confiavel na frente) sem tocar no codigo.
+Em producao, basta definir `DB_USERNAME` (usuario com privilegios minimos), `SHOW_SQL=false`, `COOKIE_SECURE=true` (exige HTTPS) e `TRUST_PROXY_HEADERS=true` (somente se houver um proxy confiavel na frente) sem tocar no codigo.
+
+### Flyway adotado
+
+O schema deixou de ser gerenciado implicitamente pelo Hibernate (`ddl-auto=update`) e passou a ser versionado pelo Flyway:
+
+- `db/migration/V1__baseline.sql` recria fielmente o schema atual das 6 tabelas usadas pelas entidades JPA (`artista`, `cliente`, `servico`, `portfolio`, `pedido`, `arte`), incluindo colunas legadas da entidade `Cliente` (`cpf`, `cidade`, `data_cadastro`) que existem no banco mas nao sao mapeadas pelo codigo atual — mantidas no baseline para refletir a realidade do schema, nao para serem usadas.
+- `spring.flyway.baseline-on-migrate=true` + `baseline-version=1` fazem o banco de desenvolvimento existente ser tratado como "ja na versao 1" sem reexecutar o baseline nele; um banco novo/vazio (CI, ambiente de outro desenvolvedor) executa o script e chega ao mesmo schema.
+- `spring.jpa.hibernate.ddl-auto` passou a ser `validate` por padrao em **todos** os ambientes (antes era `update` em dev). Mudancas de schema agora exigem criar uma nova migracao versionada em `db/migration`, em vez de deixar o Hibernate alterar tabelas automaticamente ao subir a aplicacao.
+- Validado nos dois cenarios possiveis: contra o banco de desenvolvimento existente (baseline aplicado, Hibernate `validate` passou sem erros) e contra um banco novo/vazio criado do zero (Flyway executou o `V1` e criou as tabelas, Hibernate `validate` tambem passou).
+
+Tabelas legadas nao relacionadas a nenhuma entidade atual (`item_nota`, `nota_fiscal`, `produto`, de uma versao anterior do projeto) foram deixadas de fora do Flyway propositalmente — nao pertencem ao schema que a aplicacao atual gerencia.
+
+### Usuario de banco com privilegio minimo: resolvido
+
+`backend/src/main/resources/db/provision-app-role.sql` cria o papel `artisanvault_app` (`NOSUPERUSER`, `NOCREATEDB`, `NOCREATEROLE`) com apenas `SELECT`/`INSERT`/`UPDATE`/`DELETE` nas 6 tabelas que a aplicacao usa (e `USAGE`/`SELECT` nas sequences correspondentes) — sem privilegio de DDL e sem acesso as tabelas legadas nao relacionadas (`produto`, `nota_fiscal`, `item_nota`). Como o Flyway precisa de privilegio de DDL para aplicar migracoes, `spring.flyway.user`/`spring.flyway.password` permitem configurar um usuario separado (com DDL) so para as migracoes, enquanto `spring.datasource.username`/`password` (usado pela aplicacao em runtime) fica com o usuario restrito. Testado ponta a ponta neste ambiente: `CREATE TABLE` e leitura de `produto` sao negados para `artisanvault_app`, enquanto `SELECT`/`INSERT`/`UPDATE`/`DELETE` nas tabelas da aplicacao funcionam, e a aplicacao sobe normalmente com o Flyway rodando via `postgres` e o restante via `artisanvault_app`.
+
+### Rotacao de segredos: ja tinha sido feita
+
+O commit `a2573c3` ("Move segredos... para fora do git") ja rotacionou tanto `jwt.secret` quanto a senha do Postgres ao mesmo tempo em que os moveu para `application-local.properties` (gitignored) — nao era so uma realocacao dos mesmos valores. Este item estava marcado como pendente no checklist por engano; na pratica ja estava resolvido antes desta rodada.
 
 ### Risco remanescente (fora do alcance de uma mudanca de codigo)
 
-- Criar de fato um usuario de banco com privilegios minimos e rotacionar segredos ja expostos depende do ambiente de infraestrutura real (servidor Postgres de producao), nao apenas do repositorio.
-- Adotar Flyway/Liquibase para migracoes controladas continua sendo uma melhoria arquitetural maior (exigiria escrever o historico de migracoes para o schema existente) e deve ser um projeto proprio caso o projeto va para producao de verdade.
+Servir a aplicacao por HTTPS real e ativar `COOKIE_SECURE=true` contra um dominio de producao de verdade depende de ter um ambiente de deploy real, que nao existe neste projeto (so roda em `localhost` ate agora).
 
 ## Checklist atualizado
 
@@ -192,32 +214,32 @@ Em producao, basta definir `DB_USERNAME` (usuario com privilegios minimos), `DDL
 - [x] Criar endpoints de pedidos filtrados no backend (`/meus`, `/recebidos`).
 - [x] Remover filtros de seguranca feitos apenas no frontend.
 - [x] Validar dono/papel em `POST /api/arte/post`.
-- [x] Validar upload por conteudo real (magic bytes + `ImageIO` para formatos suportados).
-- [ ] Reprocessar/reencodar todas as imagens do zero antes de salvar (parcial: WEBP nao tem decoder nativo no JDK).
+- [x] Validar upload por conteudo real (magic bytes + `ImageIO`).
+- [x] Reencodar imagens a partir dos pixels decodificados antes de salvar (WEBP removido por nao ter encoder nativo no JDK).
 - [x] Adicionar headers seguros para `/uploads/**` (`X-Content-Type-Options: nosniff` via Spring Security).
 - [x] Trocar JWT em `localStorage` por cookie `HttpOnly`.
 - [x] Manter `withCredentials: true` (agora necessario para o cookie de sessao).
-- [x] Derivar `AuthUser` da resposta autenticada do backend (`GET /api/login/me`), nao do `localStorage`.
+- [x] Derivar `AuthUser` no `AuthContext` a partir da resposta autenticada do backend (`GET /api/login/me`), nao do `localStorage`.
+- [x] Remover leitura residual de `artisanvault_user` em `app/login/page.tsx`; redirecionamento pos-login agora usa o `AuthUser` retornado por `login()`.
 - [x] Avaliar necessidade de DTOs de entrada/saida (Portifolio publico corrigido; demais entidades avaliadas e sem exposicao real apos as correcoes de listagem).
 - [x] Omitir `id_cliente`/`id_pedido` das respostas publicas de portfolio.
 - [x] Remover metodo morto `artistaService.login(email, senha)` do frontend.
 - [x] Adicionar rate limit no login.
 - [x] So confiar em `X-Forwarded-For` atras de proxy explicitamente configurado (`TRUST_PROXY_HEADERS`).
 - [ ] Migrar rate limit para armazenamento distribuido se houver multiplas instancias.
+- [x] Adicionar protecao CSRF explicita (cookie `XSRF-TOKEN` + header `X-XSRF-TOKEN`).
 - [x] Atualizar dependencias do frontend.
 - [x] Atualizar dependencias do backend.
-- [ ] Rotacionar segredos antigos que ja tenham sido expostos (depende do ambiente real de producao).
-- [ ] Usar usuario de banco com privilegios minimos (depende do ambiente real de producao; configuravel via `DB_USERNAME`).
-- [x] Tornar `show-sql`, `ddl-auto`, `cookie.secure` e `trust-proxy-headers` configuraveis por ambiente, com defaults seguros de desenvolvimento.
-- [ ] Definir `COOKIE_SECURE=true`, `DDL_AUTO=validate` e `SHOW_SQL=false` no ambiente de producao.
-- [x] Adicionar testes de integracao para autorizacao dos controllers (arte, pedido), upload invalido e rate limit.
+- [x] Adotar migracoes versionadas (Flyway) com baseline refletindo o schema real.
+- [x] Tornar `ddl-auto=validate` o padrao em todos os ambientes, com mudancas de schema feitas via migracao.
+- [x] Rotacionar segredos antigos que ja tenham sido expostos (feito no commit `a2573c3`, antes desta rodada).
+- [x] Usar usuario de banco com privilegios minimos (`artisanvault_app`, provisionado via `db/provision-app-role.sql`; Flyway roda com usuario separado com privilegio de DDL).
+- [x] Tornar `show-sql`, `cookie.secure` e `trust-proxy-headers` configuraveis por ambiente, com defaults seguros de desenvolvimento.
+- [ ] Definir `COOKIE_SECURE=true` no ambiente de producao (exige HTTPS e um dominio real de deploy).
+- [x] Adicionar testes de integracao para autorizacao dos controllers (arte, pedido), upload invalido/reencodificacao e rate limit.
 
-## Itens fora do escopo desta rodada (dependem de infraestrutura real ou decisao de produto)
+## Itens fora do escopo (dependem de infraestrutura real de producao)
 
-1. Provisionar um usuario de banco de dados com privilegios minimos em um Postgres de producao real.
-2. Rotacionar segredos que eventualmente ja tenham vazado antes desta auditoria.
-3. Adotar Flyway/Liquibase para versionar o schema (projeto arquitetural proprio).
-4. Migrar para Spring Boot 4.x (major upgrade, fora do escopo de uma correcao de seguranca).
-5. Rate limit distribuido (Redis) caso o backend passe a rodar em multiplas instancias.
-6. Protecao CSRF explicita, caso a politica de cookie mude para `SameSite=None`/multiplos subdominios.
-7. Reencodar todas as imagens a partir dos pixels (e decidir o que fazer com WEBP), caso uploads de terceiros nao confiaveis se tornem um vetor mais critico.
+1. Migrar para Spring Boot 4.x (major upgrade, fora do escopo de uma correcao de seguranca).
+2. Rate limit distribuido (Redis) caso o backend passe a rodar em multiplas instancias — requer um Redis de verdade, que nao existe neste projeto.
+3. Servir a aplicacao por HTTPS com `COOKIE_SECURE=true` em producao — requer um dominio/certificado real de deploy, que nao existe neste projeto.
