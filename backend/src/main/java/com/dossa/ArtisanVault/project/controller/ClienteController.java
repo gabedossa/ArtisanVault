@@ -2,6 +2,7 @@ package com.dossa.ArtisanVault.project.controller;
 
 import com.dossa.ArtisanVault.project.entity.Cliente;
 import com.dossa.ArtisanVault.project.service.ClienteService;
+import com.dossa.ArtisanVault.project.service.EmailAlreadyInUseException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -26,11 +27,15 @@ public class ClienteController {
 
     @PostMapping("/post")
     public ResponseEntity<String> createCliente(@RequestBody Cliente cliente){
-        int result= cliService.save(cliente);
-        if (result > 0){
-            return ResponseEntity.status(HttpStatus.CREATED).body("Cliente criado com sucesso");
-        } else{
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Erro ao criar cliente");
+        try {
+            int result = cliService.save(cliente);
+            if (result > 0){
+                return ResponseEntity.status(HttpStatus.CREATED).body("Cliente criado com sucesso");
+            } else{
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Erro ao criar cliente");
+            }
+        } catch (EmailAlreadyInUseException exception) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(exception.getMessage());
         }
     }
     // Deletando Artista

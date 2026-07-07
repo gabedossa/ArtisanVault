@@ -2,6 +2,7 @@ package com.dossa.ArtisanVault.project.controller;
 
 import com.dossa.ArtisanVault.project.entity.Artista;
 import com.dossa.ArtisanVault.project.service.ArtistaService;
+import com.dossa.ArtisanVault.project.service.EmailAlreadyInUseException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -38,11 +39,15 @@ public class ArtistaController {
     // Método para criar um novo artista
     @PostMapping
     public ResponseEntity<String> save(@RequestBody Artista artista) {
-        int result = artistaService.save(artista);
-        if (result > 0) {
-            return ResponseEntity.status(HttpStatus.CREATED).body("Artista criado com sucesso");
-        } else {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Erro ao criar artista");
+        try {
+            int result = artistaService.save(artista);
+            if (result > 0) {
+                return ResponseEntity.status(HttpStatus.CREATED).body("Artista criado com sucesso");
+            } else {
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Erro ao criar artista");
+            }
+        } catch (EmailAlreadyInUseException exception) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(exception.getMessage());
         }
     }
 
@@ -55,11 +60,15 @@ public class ArtistaController {
         }
 
         artista.setIdArtista(id);
-        int result = artistaService.update(artista);
-        if (result > 0) {
-            return ResponseEntity.ok("Artista atualizado com sucesso");
-        } else {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Artista não encontrado");
+        try {
+            int result = artistaService.update(artista);
+            if (result > 0) {
+                return ResponseEntity.ok("Artista atualizado com sucesso");
+            } else {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Artista não encontrado");
+            }
+        } catch (EmailAlreadyInUseException exception) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(exception.getMessage());
         }
     }
 

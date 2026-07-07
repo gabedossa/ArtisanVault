@@ -47,9 +47,10 @@ public class ArtistaRepository {
         return jdbcTemplate.update(sql, id);
     }
 
-    // Método para encontrar Artista por email
+    // Método para encontrar Artista por email. O chamador deve passar o email ja
+    // normalizado (EmailNormalizer.normalize) - a comparacao aqui e so LOWER(email) = ?.
     public Optional<Artista> findByEmail(String email) {
-        String sql = "SELECT * FROM artista WHERE email = ?";
+        String sql = "SELECT * FROM artista WHERE LOWER(email) = ?";
         try {
             Artista artista = jdbcTemplate.queryForObject(sql, new Object[]{email}, new ArtistaRowMapper());
             return Optional.ofNullable(artista);

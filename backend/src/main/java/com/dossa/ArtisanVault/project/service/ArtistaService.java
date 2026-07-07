@@ -2,6 +2,8 @@ package com.dossa.ArtisanVault.project.service;
 
 import com.dossa.ArtisanVault.project.entity.Artista;
 import com.dossa.ArtisanVault.project.repository.ArtistaRepository;
+import com.dossa.ArtisanVault.project.repository.ClienteRepository;
+import com.dossa.ArtisanVault.project.util.EmailNormalizer;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -14,6 +16,9 @@ public class ArtistaService {
 
     @Autowired
     private ArtistaRepository artistaRepository;
+
+    @Autowired
+    private ClienteRepository clienteRepository;
 
     @Autowired
     private PasswordEncoder passwordEncoder;
@@ -30,14 +35,25 @@ public class ArtistaService {
 
     // Método para criar um novo artista
     public int save(Artista artista) {
+        String email = EmailNormalizer.normalize(artista.getEmail());
+        if (isEmailTaken(email)) {
+            throw new EmailAlreadyInUseException(email);
+        }
+        artista.setEmail(email);
         artista.setSenha(passwordEncoder.encode(artista.getSenha()));
         return artistaRepository.save(artista);
     }
 
     // Método para atualizar um artista existente
     public int update(Artista artista) {
+        Artista existing = artistaRepository.findById(artista.getIdArtista());
+        String email = EmailNormalizer.normalize(artista.getEmail());
+        if (!email.equals(EmailNormalizer.normalize(existing.getEmail())) && isEmailTaken(email)) {
+            throw new EmailAlreadyInUseException(email);
+        }
+        artista.setEmail(email);
+
         if (artista.getSenha() == null || artista.getSenha().isBlank()) {
-            Artista existing = artistaRepository.findById(artista.getIdArtista());
             artista.setSenha(existing.getSenha());
         } else {
             artista.setSenha(passwordEncoder.encode(artista.getSenha()));
@@ -52,6 +68,13 @@ public class ArtistaService {
 
     // Método para encontrar um artista por email
     public Optional<Artista> findByEmail(String email) {
-        return artistaRepository.findByEmail(email);
+        return artistaRepository.findByEmail(EmailNormalizer.normalize(email));
+    }
+
+    // O mesmo e-mail nao pode existir em cliente nem em artista (login resolve por
+    // e-mail global, procurando cliente antes de artista).
+    private boolean isEmailTaken(String normalizedEmail) {
+        return artistaRepository.findByEmail(normalizedEmail).isPresent()
+                || clienteRepository.findByEmail(normalizedEmail).isPresent();
     }
 }

@@ -8,6 +8,7 @@ import com.dossa.ArtisanVault.project.service.ArtistaService;
 import com.dossa.ArtisanVault.project.service.ClienteService;
 import com.dossa.ArtisanVault.project.service.LoginRateLimiterService;
 import com.dossa.ArtisanVault.project.service.LoginService;
+import com.dossa.ArtisanVault.project.util.EmailNormalizer;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -58,7 +59,7 @@ public class LoginController {
             return ResponseEntity.badRequest().body("Email e senha são obrigatórios.");
         }
 
-        String email = loginRequest.getEmail().trim().toLowerCase();
+        String email = EmailNormalizer.normalize(loginRequest.getEmail());
         String ip = clientIp(request);
 
         if (rateLimiterService.isBlocked(email, ip)) {

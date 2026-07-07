@@ -6,13 +6,14 @@ Este documento descreve os principais caminhos de invasao identificados no proje
 
 ## Status geral
 
-Todos os pontos praticaveis foram tratados, incluindo provisionar de verdade um usuario de banco com privilegio minimo neste ambiente (nao apenas documentar a ideia):
+A maior parte dos pontos praticaveis foi tratada, incluindo provisionar de verdade um usuario de banco com privilegio minimo neste ambiente (nao apenas documentar a ideia). A releitura mais recente encontrou 2 erros de seguranca/logica de identidade (colisao de e-mail entre tipos de usuario e normalizacao inconsistente de e-mail no fluxo de login/cadastro) — ambos corrigidos nesta rodada, ver secao 12.
 
 - Imagens de portfolio agora sao reencodadas a partir dos pixels decodificados (`ImageIO.write`) em vez de salvar os bytes originais, descartando qualquer metadado/payload residual anexado ao arquivo. WEBP foi removido da lista de formatos aceitos (backend e frontend), ja que o `ImageIO` do JDK nao tem encoder para esse formato e nao daria para reencodar com seguranca.
 - Protecao CSRF explicita adicionada via `CookieCsrfTokenRepository` (cookie `XSRF-TOKEN` legivel por JS + header `X-XSRF-TOKEN`), o padrao recomendado pelo proprio Spring Security para SPAs com cookie de sessao. `POST /api/login` e `POST /api/login/logout` ficam de fora da checagem (nao ha autoridade ambiente para um CSRF abusar antes do login existir). O frontend (axios) foi configurado para enviar o header automaticamente.
 - Adotado Flyway com uma migracao baseline (`V1__baseline.sql`) que reflete o schema real atual. `spring.jpa.hibernate.ddl-auto` passou a ser `validate` por padrao em todos os ambientes — mudancas de schema agora devem ser feitas criando uma nova migracao versionada, nao deixando o Hibernate alterar tabelas silenciosamente.
 - Criado o papel Postgres `artisanvault_app` com privilegio minimo (`db/provision-app-role.sql`), com Flyway rodando via um usuario separado (com privilegio de DDL) atraves de `spring.flyway.user`/`password`. Testado ponta a ponta neste ambiente: login, CRUD via API e bloqueio de `CREATE TABLE`/acesso a tabelas nao relacionadas para o papel restrito.
 - A rotacao de segredos ja expostos (`jwt.secret`, senha do Postgres) tinha sido feita anteriormente (commit `a2573c3`) — o checklist estava desatualizado, nao o codigo.
+- Corrigida colisao/normalizacao de e-mail entre `cliente` e `artista`: `ArtistaService`/`ClienteService` agora bloqueiam e-mail duplicado entre os dois tipos de usuario antes de salvar (`409 Conflict`), e a busca de artista por e-mail passou a ser case-insensitive, no mesmo padrao ja usado por cliente. Migracao Flyway `V2` normaliza os dados existentes e adiciona indices unicos case-insensitive por tabela. Ver secao 12.
 - Restam 2 itens que dependem de infraestrutura de producao que genuinamente nao existe neste projeto (nenhum Redis rodando, nenhum dominio real com HTTPS). O suporte de codigo/configuracao para os dois ja existe e e opcional (desligado por padrao) — falta apenas a infraestrutura real para ativa-lo e validar ponta a ponta. Ver secao abaixo.
 
 Legenda:
@@ -24,7 +25,7 @@ Legenda:
 
 ## O que ainda falta ajustar
 
-Os unicos itens genuinamente pendentes dependem de infraestrutura que nao existe neste ambiente (nao ha como provisionar um Redis ou um dominio com HTTPS real dentro do repositorio). Em ambos os casos o suporte no codigo ja foi implementado como opt-in (desligado por padrao), faltando so a infraestrutura real para liga-lo:
+Pendencias de infraestrutura/producao que continuam abertas. Os itens abaixo dependem de infraestrutura que nao existe neste ambiente (nao ha como provisionar um Redis ou um dominio com HTTPS real dentro do repositorio). Em ambos os casos o suporte no codigo ja foi implementado como opt-in (desligado por padrao), faltando so a infraestrutura real para liga-lo:
 
 1. `[PENDENTE]` Migrar o rate limit para armazenamento distribuido (Redis) se o backend passar a rodar em multiplas instancias atras de um load balancer. Ja existe `RedisLoginRateLimiterService` (`app.rate-limit.store=redis` / `RATE_LIMIT_STORE=redis`), ao lado da implementacao em memoria que continua sendo o default. Nao testado contra um Redis real neste ambiente (nenhum Redis disponivel aqui) — so validado que a aplicacao sobe normalmente com a dependencia `spring-boot-starter-data-redis` no classpath e o default `memory` ativo.
 2. `[PENDENTE]` Servir a aplicacao por HTTPS real e definir `COOKIE_SECURE=true` contra esse dominio de producao. `app.cookie.secure`/`app.trust-proxy-headers` ja sao configuraveis via env (secao 11); o que faltava era um exemplo concreto de infraestrutura para isso, agora em `deploy/docker-compose.prod.yml` (Caddy como proxy reverso com HTTPS automatico via Let's Encrypt, na frente do backend, com `COOKIE_SECURE=true`, `TRUST_PROXY_HEADERS=true` e `RATE_LIMIT_STORE=redis`). Nao foi implantado nem testado contra um dominio real neste ambiente.
@@ -202,6 +203,32 @@ O commit `a2573c3` ("Move segredos... para fora do git") ja rotacionou tanto `jw
 
 Servir a aplicacao por HTTPS real e ativar `COOKIE_SECURE=true` contra um dominio de producao de verdade depende de ter um ambiente de deploy real, que nao existe neste projeto (so roda em `localhost` ate agora). Existe um exemplo pronto de como isso ficaria em `deploy/docker-compose.prod.yml` (`backend/Dockerfile` + Caddy como proxy reverso com HTTPS automatico via Let's Encrypt + Redis para o rate limit distribuido), com `COOKIE_SECURE=true`/`TRUST_PROXY_HEADERS=true`/`RATE_LIMIT_STORE=redis` ja configurados nele — falta apontar um dominio real (`DOMAIN` em `deploy/.env.prod`) e subir isso em um servidor de verdade para validar.
 
+## 12. Novos achados da releitura: e-mail e identidade
+
+Status: `[RESOLVIDO]`.
+
+### 12.1. Colisao de e-mail entre cliente e artista
+
+`cliente.email` era unico dentro da tabela `cliente`, mas `artista.email` nao tinha `UNIQUE` nem `NOT NULL`, e nao existia garantia global de que o mesmo e-mail nao pudesse existir nas duas tabelas. Como `LoginService` procura primeiro em `ClienteRepository` e so depois em `ArtistaRepository`, uma colisao de e-mail podia causar bloqueio de login, confusao de identidade ou comportamento imprevisivel.
+
+O que mudou:
+
+- `ArtistaService.save`/`update` e `ClienteService.save`/`update` agora consultam as duas tabelas (`ArtistaRepository`/`ClienteRepository`) antes de criar ou atualizar e lancam `EmailAlreadyInUseException` se o e-mail normalizado ja existir em qualquer uma delas. `ArtistaController`/`ClienteController` traduzem essa excecao para `409 Conflict`.
+- Migracao Flyway `V2__email_normalizacao_unicidade.sql` normaliza os e-mails existentes (`LOWER(TRIM(email))`) e cria indices unicos case-insensitive por tabela (`ux_cliente_email_lower`, `ux_artista_email_lower`; a antiga constraint `UNIQUE` case-sensitive de `cliente.email` foi substituida pelo indice). `artista.email` passou a ser `NOT NULL`. Isso cobre duplicatas dentro da mesma tabela sob concorrencia, que a checagem do backend sozinha nao evitaria; a checagem cross-table (cliente vs. artista) continua sendo responsabilidade do backend, ja que Postgres nao suporta constraint de unicidade entre tabelas diferentes.
+- Testado ponta a ponta neste ambiente (Flyway aplicou a migracao no banco de dev real, schema foi para a versao 2): criar cliente com e-mail ja usado por um artista existente retorna `409`; criar artista com e-mail ja usado por um cliente existente retorna `409`; cadastro com e-mail novo continua funcionando (`201`).
+- A solucao mais robusta no longo prazo continua sendo centralizar autenticacao em uma tabela unica de usuario com perfil de cliente/artista separado — fora do escopo desta correcao pontual (mudaria o schema e varios fluxos de autorizacao).
+
+### 12.2. Normalizacao inconsistente de e-mail
+
+`LoginController` transformava o e-mail de login com `trim().toLowerCase()`, `ClienteRepository` buscava com `LOWER(email)`, mas `ArtistaRepository` ainda usava `email = ?` (comparacao exata). Isso permitia divergencia por maiusculas/minusculas e podia impedir login de artista cadastrado com casing diferente.
+
+O que mudou:
+
+- Novo utilitario `EmailNormalizer.normalize` (`trim().toLowerCase()`, null-safe) usado em `LoginController`, `ArtistaService` e `ClienteService` antes de qualquer busca, criacao ou atualizao por e-mail.
+- `ArtistaRepository.findByEmail` passou a comparar com `LOWER(email) = ?`, no mesmo padrao ja usado por `ClienteRepository.findByEmail`.
+- `ArtistaService.save`/`update` e `ClienteService.save`/`update` normalizam e persistem o e-mail antes de gravar (antes o valor cru do corpo da requisicao ia direto para o banco).
+- Coberto por testes novos em `ArtistaServiceTest`/`ClienteServiceTest` (normalizacao antes de salvar, colisao de e-mail entre tipos de usuario).
+
 ## Checklist atualizado
 
 - [x] Remover `GET /**` publico.
@@ -221,6 +248,8 @@ Servir a aplicacao por HTTPS real e ativar `COOKIE_SECURE=true` contra um domini
 - [x] Manter `withCredentials: true` (agora necessario para o cookie de sessao).
 - [x] Derivar `AuthUser` no `AuthContext` a partir da resposta autenticada do backend (`GET /api/login/me`), nao do `localStorage`.
 - [x] Remover leitura residual de `artisanvault_user` em `app/login/page.tsx`; redirecionamento pos-login agora usa o `AuthUser` retornado por `login()`.
+- [x] Impedir colisao de e-mail entre `cliente` e `artista` (checagem cross-table no backend antes de salvar + indices unicos case-insensitive por tabela via Flyway; unificar em uma tabela de autenticacao continua sendo a melhoria de longo prazo, fora de escopo).
+- [x] Normalizar e-mail de forma consistente em cadastro, update e busca (`EmailNormalizer.normalize` + `ArtistaRepository`/`ClienteRepository` ambos com `LOWER(email) = ?`).
 - [x] Avaliar necessidade de DTOs de entrada/saida (Portifolio publico corrigido; demais entidades avaliadas e sem exposicao real apos as correcoes de listagem).
 - [x] Omitir `id_cliente`/`id_pedido` das respostas publicas de portfolio.
 - [x] Remover metodo morto `artistaService.login(email, senha)` do frontend.
