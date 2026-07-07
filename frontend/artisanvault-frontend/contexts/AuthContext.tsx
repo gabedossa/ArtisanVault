@@ -7,7 +7,7 @@ import { authService } from '@/lib/services/auth.service'
 interface AuthContextType {
   user: AuthUser | null
   loading: boolean
-  login: (data: LoginRequest) => Promise<void>
+  login: (data: LoginRequest) => Promise<AuthUser>
   logout: () => void
   isAuthenticated: boolean
 }
@@ -39,7 +39,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (data: LoginRequest) => {
     const res = await authService.login(data)
-    setUser(toAuthUser(res))
+    const authUser = toAuthUser(res)
+    setUser(authUser)
+    return authUser
   }
 
   const logout = () => {

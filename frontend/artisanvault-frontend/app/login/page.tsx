@@ -18,10 +18,8 @@ export default function LoginPage() {
     setError('')
     setLoading(true)
     try {
-      await login(form)
-      const stored = localStorage.getItem('artisanvault_user')
-      const user = stored ? JSON.parse(stored) : null
-      router.push(user?.userType === 'ARTISTA' ? '/dashboard/artista' : '/dashboard/cliente')
+      const user = await login(form)
+      router.push(user.userType === 'ARTISTA' ? '/dashboard/artista' : '/dashboard/cliente')
     } catch {
       setError('Email ou senha incorretos. Verifique suas credenciais.')
     } finally {
