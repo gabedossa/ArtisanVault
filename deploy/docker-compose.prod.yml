@@ -1,0 +1,56 @@
+# Exemplo de deploy de producao com HTTPS real (Caddy) e rate limit distribuido
+# (Redis). Nao e usado no desenvolvimento local nem em CI — existe para ser
+# ativado quando houver um dominio e servidor de producao de verdade. Ate la,
+# os itens correspondentes no checklist de seguranca continuam pendentes.
+#
+# Uso:
+#   1. cp .env.prod.example .env.prod  e preencha os valores reais.
+#   2. Aponte DOMAIN (no .env.prod) para o dominio que resolve para este servidor.
+#   3. docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
+
+services:
+  backend:
+    build:
+      context: ../backend
+    restart: unless-stopped
+    environment:
+      DB_USERNAME: ${DB_USERNAME}
+      SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL}
+      SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      SHOW_SQL: "false"
+      COOKIE_SECURE: "true"
+      TRUST_PROXY_HEADERS: "true"
+      RATE_LIMIT_STORE: "redis"
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    depends_on:
+      - redis
+    expose:
+      - "8080"
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - backend
+
+volumes:
+  redis-data:
+  caddy-data:
+  caddy-config:

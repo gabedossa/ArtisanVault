@@ -6,7 +6,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class LoginRateLimiterServiceTest {
 
-    private final LoginRateLimiterService rateLimiter = new LoginRateLimiterService();
+    private final LoginRateLimiterService rateLimiter = new InMemoryLoginRateLimiterService();
 
     @Test
     void apos5TentativasComOMesmoEmail_bloqueiaMesmoComIpsDiferentes() {

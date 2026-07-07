@@ -13,7 +13,7 @@ Todos os pontos praticaveis foram tratados, incluindo provisionar de verdade um 
 - Adotado Flyway com uma migracao baseline (`V1__baseline.sql`) que reflete o schema real atual. `spring.jpa.hibernate.ddl-auto` passou a ser `validate` por padrao em todos os ambientes — mudancas de schema agora devem ser feitas criando uma nova migracao versionada, nao deixando o Hibernate alterar tabelas silenciosamente.
 - Criado o papel Postgres `artisanvault_app` com privilegio minimo (`db/provision-app-role.sql`), com Flyway rodando via um usuario separado (com privilegio de DDL) atraves de `spring.flyway.user`/`password`. Testado ponta a ponta neste ambiente: login, CRUD via API e bloqueio de `CREATE TABLE`/acesso a tabelas nao relacionadas para o papel restrito.
 - A rotacao de segredos ja expostos (`jwt.secret`, senha do Postgres) tinha sido feita anteriormente (commit `a2573c3`) — o checklist estava desatualizado, nao o codigo.
-- Restam apenas 2 itens que dependem de infraestrutura de producao que genuinamente nao existe neste projeto (nenhum Redis rodando, nenhum dominio real com HTTPS) — ver secao abaixo.
+- Restam 2 itens que dependem de infraestrutura de producao que genuinamente nao existe neste projeto (nenhum Redis rodando, nenhum dominio real com HTTPS). O suporte de codigo/configuracao para os dois ja existe e e opcional (desligado por padrao) — falta apenas a infraestrutura real para ativa-lo e validar ponta a ponta. Ver secao abaixo.
 
 Legenda:
 
@@ -24,10 +24,10 @@ Legenda:
 
 ## O que ainda falta ajustar
 
-Os unicos itens genuinamente pendentes dependem de infraestrutura que nao existe neste ambiente (nao ha como provisionar um Redis ou um dominio com HTTPS real dentro do repositorio):
+Os unicos itens genuinamente pendentes dependem de infraestrutura que nao existe neste ambiente (nao ha como provisionar um Redis ou um dominio com HTTPS real dentro do repositorio). Em ambos os casos o suporte no codigo ja foi implementado como opt-in (desligado por padrao), faltando so a infraestrutura real para liga-lo:
 
-1. `[PENDENTE]` Migrar o rate limit para armazenamento distribuido (Redis/Bucket4j) se o backend passar a rodar em multiplas instancias atras de um load balancer.
-2. `[PENDENTE]` Servir a aplicacao por HTTPS real e definir `COOKIE_SECURE=true` contra esse dominio de producao.
+1. `[PENDENTE]` Migrar o rate limit para armazenamento distribuido (Redis) se o backend passar a rodar em multiplas instancias atras de um load balancer. Ja existe `RedisLoginRateLimiterService` (`app.rate-limit.store=redis` / `RATE_LIMIT_STORE=redis`), ao lado da implementacao em memoria que continua sendo o default. Nao testado contra um Redis real neste ambiente (nenhum Redis disponivel aqui) — so validado que a aplicacao sobe normalmente com a dependencia `spring-boot-starter-data-redis` no classpath e o default `memory` ativo.
+2. `[PENDENTE]` Servir a aplicacao por HTTPS real e definir `COOKIE_SECURE=true` contra esse dominio de producao. `app.cookie.secure`/`app.trust-proxy-headers` ja sao configuraveis via env (secao 11); o que faltava era um exemplo concreto de infraestrutura para isso, agora em `deploy/docker-compose.prod.yml` (Caddy como proxy reverso com HTTPS automatico via Let's Encrypt, na frente do backend, com `COOKIE_SECURE=true`, `TRUST_PROXY_HEADERS=true` e `RATE_LIMIT_STORE=redis`). Nao foi implantado nem testado contra um dominio real neste ambiente.
 
 ## 1. Exposicao publica de endpoints GET
 
@@ -134,7 +134,7 @@ O IP usado na chave de rate limit so vem do header `X-Forwarded-For` quando `TRU
 
 ### Risco remanescente
 
-A implementacao e em memoria (nao distribuida). Se o backend rodar em multiplas instancias atras de um load balancer, cada instancia tera seu proprio contador. Para esse cenario, migrar para Redis (ex.: Bucket4j + Redis) seria o proximo passo natural — depende de ter um Redis disponivel no ambiente de deploy, que nao existe neste projeto hoje.
+O default continua sendo a implementacao em memoria (`InMemoryLoginRateLimiterService`, nao distribuida) — se o backend rodar em multiplas instancias atras de um load balancer, cada instancia tera seu proprio contador. Existe agora uma implementacao alternativa, `RedisLoginRateLimiterService`, que usa um ZSET por chave (`email:`/`ip:`) com timestamp como score para a janela deslizante; e ativada trocando `app.rate-limit.store` (env `RATE_LIMIT_STORE`) de `memory` para `redis`, com o host/porta/senha do Redis em `spring.data.redis.*` (env `REDIS_HOST`/`REDIS_PORT`/`REDIS_PASSWORD`). Depende de um Redis real no ambiente de deploy, que nao existe neste projeto hoje — por isso nao foi testada ponta a ponta aqui (so `LoginRateLimiterServiceTest`, contra a implementacao em memoria).
 
 ## 10. Dependencias vulneraveis
 
@@ -200,7 +200,7 @@ O commit `a2573c3` ("Move segredos... para fora do git") ja rotacionou tanto `jw
 
 ### Risco remanescente (fora do alcance de uma mudanca de codigo)
 
-Servir a aplicacao por HTTPS real e ativar `COOKIE_SECURE=true` contra um dominio de producao de verdade depende de ter um ambiente de deploy real, que nao existe neste projeto (so roda em `localhost` ate agora).
+Servir a aplicacao por HTTPS real e ativar `COOKIE_SECURE=true` contra um dominio de producao de verdade depende de ter um ambiente de deploy real, que nao existe neste projeto (so roda em `localhost` ate agora). Existe um exemplo pronto de como isso ficaria em `deploy/docker-compose.prod.yml` (`backend/Dockerfile` + Caddy como proxy reverso com HTTPS automatico via Let's Encrypt + Redis para o rate limit distribuido), com `COOKIE_SECURE=true`/`TRUST_PROXY_HEADERS=true`/`RATE_LIMIT_STORE=redis` ja configurados nele — falta apontar um dominio real (`DOMAIN` em `deploy/.env.prod`) e subir isso em um servidor de verdade para validar.
 
 ## Checklist atualizado
 
@@ -226,7 +226,7 @@ Servir a aplicacao por HTTPS real e ativar `COOKIE_SECURE=true` contra um domini
 - [x] Remover metodo morto `artistaService.login(email, senha)` do frontend.
 - [x] Adicionar rate limit no login.
 - [x] So confiar em `X-Forwarded-For` atras de proxy explicitamente configurado (`TRUST_PROXY_HEADERS`).
-- [ ] Migrar rate limit para armazenamento distribuido se houver multiplas instancias.
+- [ ] Migrar rate limit para armazenamento distribuido se houver multiplas instancias (suporte opt-in ja implementado em `RedisLoginRateLimiterService`/`RATE_LIMIT_STORE=redis`; nao testado contra um Redis real).
 - [x] Adicionar protecao CSRF explicita (cookie `XSRF-TOKEN` + header `X-XSRF-TOKEN`).
 - [x] Atualizar dependencias do frontend.
 - [x] Atualizar dependencias do backend.
@@ -235,11 +235,22 @@ Servir a aplicacao por HTTPS real e ativar `COOKIE_SECURE=true` contra um domini
 - [x] Rotacionar segredos antigos que ja tenham sido expostos (feito no commit `a2573c3`, antes desta rodada).
 - [x] Usar usuario de banco com privilegios minimos (`artisanvault_app`, provisionado via `db/provision-app-role.sql`; Flyway roda com usuario separado com privilegio de DDL).
 - [x] Tornar `show-sql`, `cookie.secure` e `trust-proxy-headers` configuraveis por ambiente, com defaults seguros de desenvolvimento.
-- [ ] Definir `COOKIE_SECURE=true` no ambiente de producao (exige HTTPS e um dominio real de deploy).
+- [ ] Definir `COOKIE_SECURE=true` no ambiente de producao (exige HTTPS e um dominio real de deploy; exemplo pronto em `deploy/docker-compose.prod.yml`, nao implantado).
 - [x] Adicionar testes de integracao para autorizacao dos controllers (arte, pedido), upload invalido/reencodificacao e rate limit.
 
 ## Itens fora do escopo (dependem de infraestrutura real de producao)
 
 1. Migrar para Spring Boot 4.x (major upgrade, fora do escopo de uma correcao de seguranca).
-2. Rate limit distribuido (Redis) caso o backend passe a rodar em multiplas instancias — requer um Redis de verdade, que nao existe neste projeto.
-3. Servir a aplicacao por HTTPS com `COOKIE_SECURE=true` em producao — requer um dominio/certificado real de deploy, que nao existe neste projeto.
+2. Rate limit distribuido (Redis) caso o backend passe a rodar em multiplas instancias — codigo pronto e opt-in (`RedisLoginRateLimiterService`), mas requer um Redis de verdade para ativar e validar, que nao existe neste projeto.
+3. Servir a aplicacao por HTTPS com `COOKIE_SECURE=true` em producao — template de deploy pronto (`deploy/docker-compose.prod.yml`, Caddy + Redis + backend), mas requer um dominio/certificado real para implantar e validar, que nao existe neste projeto.
+
+## Deploy de producao (opt-in, nao implantado)
+
+`deploy/` contem um exemplo completo de como ativar os dois itens pendentes acima quando houver um servidor/dominio de producao real:
+
+- `backend/Dockerfile`: build multi-stage do backend (`eclipse-temurin` JDK para build, JRE para runtime, usuario nao-root).
+- `deploy/docker-compose.prod.yml`: sobe `backend` + `redis` (`RATE_LIMIT_STORE=redis`) + `caddy` (proxy reverso com HTTPS automatico via Let's Encrypt, `COOKIE_SECURE=true`, `TRUST_PROXY_HEADERS=true`). O Postgres de producao e assumido como gerenciado externamente (RDS, Supabase etc.), nao faz parte deste compose.
+- `deploy/Caddyfile`: site block minimo, le o dominio de `$DOMAIN`.
+- `deploy/.env.prod.example`: template das variaveis reais necessarias (`DOMAIN`, credenciais de banco, `JWT_SECRET`). Copiar para `.env.prod` (ja no `.gitignore` do diretorio) e preencher antes de subir.
+
+Nada disso e usado em desenvolvimento local ou CI — e roda apenas se alguem explicitamente subir esse compose contra um servidor com um dominio real apontado para ele. Nao foi implantado nem testado ponta a ponta neste ambiente (sem servidor/dominio disponivel aqui).
