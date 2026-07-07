@@ -2,7 +2,9 @@
 
 *[English version](README.en.md)*
 
-Plataforma full-stack que conecta artistas a clientes. Artistas publicam portfólios e serviços; clientes descobrem talentos e acompanham pedidos — tudo em um único lugar.
+Plataforma full-stack que conecta artistas a clientes. Artistas publicam portfólios e serviços; clientes descobrem talentos, solicitam serviços e acompanham pedidos até a entrega da arte — tudo em um único lugar.
+
+Além das funcionalidades de produto, o projeto documenta seu próprio processo de auditoria e correção de segurança em [`docs/metodos-invasao-e-correcoes.md`](docs/metodos-invasao-e-correcoes.md) — um registro real de vetores de ataque identificados (IDOR, exposição de dados, upload malicioso, CSRF, etc.) e como cada um foi corrigido e testado.
 
 ---
 
@@ -10,7 +12,8 @@ Plataforma full-stack que conecta artistas a clientes. Artistas publicam portfó
 
 ```text
 ArtisanVault/
-├── backend/                     # API REST — Spring Boot + PostgreSQL
+├── backend/                     # API REST — Spring Boot + PostgreSQL + Flyway
+├── docs/                        # Auditoria de segurança e histórico de correções
 └── frontend/
     └── artisanvault-frontend/   # SPA — Next.js + Tailwind CSS
 ```
@@ -19,10 +22,10 @@ ArtisanVault/
 
 ## Stack
 
-| Camada   | Tecnologias                                    |
-| -------- | ---------------------------------------------- |
-| Backend  | Java 21, Spring Boot 3.3, JDBC, PostgreSQL     |
-| Frontend | Next.js 16, TypeScript, Tailwind CSS v4, Axios |
+| Camada   | Tecnologias                                                                    |
+| -------- | ------------------------------------------------------------------------------ |
+| Backend  | Java 21, Spring Boot 3.5, Spring Security, JWT (jjwt), JDBC, PostgreSQL, Flyway |
+| Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS v4, Axios                       |
 
 ---
 
@@ -30,11 +33,26 @@ ArtisanVault/
 
 - Cadastro e login de **Artistas** e **Clientes**
 - Portfólios com galeria de obras por artista
-- Catálogo de serviços com preço
-- Pedidos com status (aguardando / em andamento / entregue)
-- Dashboard do artista — gerenciar perfil, portfólios, serviços e pedidos recebidos
+- Catálogo de serviços com título, descrição e preço
+- Fluxo completo de pedido: cliente solicita um serviço → artista marca como "em andamento" → artista entrega a arte (que vira um trabalho no portfólio, vinculado ao cliente e ao pedido)
+- Dashboard do artista — gerenciar perfil, portfólio, serviços e pedidos recebidos
 - Dashboard do cliente — acompanhar pedidos e explorar artistas
 - Busca de artistas por nome ou descrição
+- Modo claro/escuro
+
+---
+
+## Segurança
+
+Este projeto passou por mais de uma rodada de auditoria de segurança (ver [`docs/metodos-invasao-e-correcoes.md`](docs/metodos-invasao-e-correcoes.md) para o histórico completo). Estado atual:
+
+- **Autenticação stateless via JWT em cookie `HttpOnly`** — o token nunca fica acessível a JavaScript no navegador (nem em `localStorage`, nem no corpo da resposta de login); a identidade da sessão é sempre revalidada contra o backend (`GET /api/login/me`).
+- **Proteção CSRF explícita** (`CookieCsrfTokenRepository` + header `X-XSRF-TOKEN`), o padrão do Spring Security para SPAs com cookie de sessão.
+- **Autorização por dono do recurso** em todos os endpoints de escrita — um usuário autenticado não consegue editar, excluir ou criar dados vinculados a outro usuário (testado com `ArteControllerTest`, `PedidoControllerTest` e verificações manuais ponta a ponta).
+- **Rate limit no login** (5 tentativas por e-mail e por IP a cada 5 minutos), sem confiar cegamente em `X-Forwarded-For`.
+- **Upload de imagem validado por conteúdo real**: assinatura binária (magic bytes) + decodificação via `ImageIO`, e a imagem salva é **reencodada a partir dos pixels decodificados** (não os bytes originais), descartando qualquer payload anexado ao arquivo.
+- **Schema de banco versionado com Flyway** (`ddl-auto=validate` em todos os ambientes) e um papel de banco com **privilégio mínimo** (`artisanvault_app`, só DML nas tabelas da aplicação) separado do usuário usado para rodar migrações.
+- Segredos (`jwt.secret`, senha do banco) ficam fora do controle de versão e são configuráveis por variável de ambiente.
 
 ---
 
@@ -112,7 +130,12 @@ A aplicação ficará disponível em `http://localhost:3000`.
 
 ## Testes
 
-O backend possui testes unitários (JUnit 5 + Mockito) cobrindo as regras de negócio dos services principais — login (JWT), cadastro/atualização de artistas e clientes (incluindo o hash de senha com BCrypt).
+O backend tem 35 testes automatizados (JUnit 5 + Mockito), cobrindo tanto regras de negócio quanto segurança:
+
+- **Services**: login (JWT), cadastro/atualização de artistas e clientes (incluindo hash de senha com BCrypt).
+- **Autorização**: dono vs. não-dono vs. recurso inexistente em arte e pedidos (`ArteControllerTest`, `PedidoControllerTest`).
+- **Upload de imagem**: rejeição de conteúdo inválido, `Content-Type` não suportado, arquivo vazio, e remoção de dados anexados via reencodificação (`ImageStorageServiceTest`).
+- **Rate limit de login**: bloqueio por e-mail e por IP, reset após sucesso, isolamento entre chaves (`LoginRateLimiterServiceTest`).
 
 ```bash
 cd backend
@@ -123,75 +146,102 @@ mvn test
 
 ## Endpoints da API
 
+Autenticação via cookie `HttpOnly` (JWT). Rotas marcadas como **dono** retornam `403` se o usuário autenticado não for o dono do recurso.
+
 ### Autenticação
 
-| Método | Rota         | Descrição                                     |
-| ------ | ------------ | --------------------------------------------- |
-| POST   | `/api/login` | Login unificado — retorna `{email, userType}` |
+| Método | Rota                | Descrição                                                  | Acesso           |
+| ------ | ------------------- | ------------------------------------------------------------ | ---------------- |
+| POST   | `/api/login`        | Login unificado (artista ou cliente); define o cookie JWT     | Público, com rate limit |
+| GET    | `/api/login/me`     | Retorna a identidade autenticada atual                        | Autenticado      |
+| POST   | `/api/login/logout` | Expira o cookie JWT                                           | Público          |
 
 ### Artistas
 
-| Método | Rota                         | Descrição         |
-| ------ | ---------------------------- | ----------------- |
-| GET    | `/api/artistas`              | Listar todos      |
-| GET    | `/api/artistas/{id}`         | Buscar por ID     |
-| GET    | `/api/artistas/email?email=` | Buscar por email  |
-| POST   | `/api/artistas`              | Criar artista     |
-| PUT    | `/api/artistas/{id}`         | Atualizar artista |
-| DELETE | `/api/artistas/{id}`         | Remover artista   |
+| Método | Rota                          | Descrição              | Acesso      |
+| ------ | ----------------------------- | ------------------------ | ----------- |
+| GET    | `/api/artistas`               | Listar todos             | Público     |
+| GET    | `/api/artistas/{id}`          | Buscar por ID             | Público     |
+| GET    | `/api/artistas/email?email=`  | Buscar por e-mail         | Autenticado |
+| POST   | `/api/artistas`               | Criar artista             | Público     |
+| PUT    | `/api/artistas/{id}`          | Atualizar perfil          | Dono        |
+| DELETE | `/api/artistas/{id}`          | Remover conta             | Dono        |
 
 ### Clientes
 
-| Método | Rota                      | Descrição      |
-| ------ | ------------------------- | -------------- |
-| GET    | `/api/cliente`            | Listar todos   |
-| GET    | `/api/cliente/{id}`       | Buscar por ID  |
-| POST   | `/api/cliente/post`       | Criar cliente  |
-| DELETE | `/api/cliente/delete/{id}`| Remover cliente|
+| Método | Rota                        | Descrição                | Acesso      |
+| ------ | ---------------------------- | -------------------------- | ----------- |
+| GET    | `/api/cliente/me`            | Dados do próprio cliente    | Autenticado |
+| POST   | `/api/cliente/post`          | Criar cliente               | Público     |
+| DELETE | `/api/cliente/delete/{id}`   | Remover conta               | Dono        |
 
-### Portfólios, Serviços, Artes e Pedidos
+### Serviços
 
-| Método | Rota                           | Descrição          |
-| ------ | ------------------------------ | ------------------ |
-| GET    | `/api/portifolio`              | Listar portfólios  |
-| GET    | `/api/portifolio/{id}`         | Buscar portfólio   |
-| DELETE | `/api/portifolio/delete/{id}`  | Remover portfólio  |
-| GET    | `/api/servico`                 | Listar serviços    |
-| DELETE | `/api/servico/delete/{id}`     | Remover serviço    |
-| GET    | `/api/arte`                    | Listar obras       |
-| POST   | `/api/arte/post`               | Criar obra         |
-| DELETE | `/api/arte/delete/{id}`        | Remover obra       |
-| GET    | `/api/pedido`                  | Listar pedidos     |
-| GET    | `/api/pedido/{id}`             | Buscar pedido      |
-| DELETE | `/api/pedido/delete/{id}`      | Remover pedido     |
+| Método | Rota                       | Descrição               | Acesso      |
+| ------ | --------------------------- | -------------------------- | ----------- |
+| GET    | `/api/servico`              | Listar todos                | Público     |
+| GET    | `/api/servico/{id}`         | Buscar por ID                | Público     |
+| POST   | `/api/servico`              | Criar serviço                | Dono (artista) |
+| PUT    | `/api/servico/{id}`         | Atualizar serviço             | Dono        |
+| DELETE | `/api/servico/delete/{id}`  | Remover serviço               | Dono        |
+
+### Portfólio
+
+| Método | Rota                          | Descrição                                      | Acesso         |
+| ------ | ------------------------------ | ------------------------------------------------- | -------------- |
+| GET    | `/api/portifolio`              | Listar trabalhos (sem `id_cliente`/`id_pedido`)     | Público        |
+| GET    | `/api/portifolio/{id}`         | Buscar trabalho (idem)                              | Público        |
+| POST   | `/api/portifolio`              | Publicar novo trabalho (multipart, com imagem)       | Dono (artista) |
+| DELETE | `/api/portifolio/delete/{id}`  | Remover trabalho                                    | Dono           |
+
+### Arte
+
+| Método | Rota                     | Descrição                                       | Acesso      |
+| ------ | ------------------------- | -------------------------------------------------- | ----------- |
+| GET    | `/api/arte`                | Listar obras                                        | Autenticado |
+| GET    | `/api/arte/{id}`           | Buscar obra por ID                                  | Autenticado |
+| POST   | `/api/arte/post`           | Criar obra vinculada a um portfólio                 | Dono (do portfólio) |
+| DELETE | `/api/arte/delete/{id}`    | Remover obra                                        | Dono        |
+
+### Pedidos
+
+| Método | Rota                         | Descrição                                                  | Acesso         |
+| ------ | ----------------------------- | -------------------------------------------------------------- | -------------- |
+| GET    | `/api/pedido/{id}`            | Buscar pedido                                                    | Dono (cliente ou artista) |
+| GET    | `/api/pedido/meus`             | Pedidos feitos pelo cliente autenticado                          | Autenticado (cliente) |
+| GET    | `/api/pedido/recebidos`        | Pedidos recebidos pelo artista autenticado                        | Autenticado (artista) |
+| POST   | `/api/pedido`                  | Cliente solicita um serviço a um artista                          | Dono (cliente) |
+| PUT    | `/api/pedido/{id}/iniciar`     | Artista marca o pedido como "em andamento"                        | Dono (artista) |
+| POST   | `/api/pedido/{id}/entregar`    | Artista entrega a arte (multipart) — cria o trabalho no portfólio | Dono (artista) |
+| DELETE | `/api/pedido/delete/{id}`      | Remover pedido                                                     | Dono (cliente ou artista) |
 
 ---
 
 ## Rotas do Frontend
 
-| Rota                  | Descrição                        |
-| --------------------- | -------------------------------- |
-| `/`                   | Landing page                     |
-| `/artistas`           | Listagem de artistas com busca   |
-| `/artistas/[id]`      | Perfil público do artista        |
-| `/portifolios/[id]`   | Galeria de obras do portfólio    |
-| `/login`              | Login                            |
-| `/cadastro/artista`   | Cadastro de artista              |
-| `/cadastro/cliente`   | Cadastro de cliente              |
-| `/dashboard/artista`  | Dashboard do artista             |
-| `/dashboard/cliente`  | Dashboard do cliente             |
+| Rota                  | Descrição                                                         |
+| --------------------- | -------------------------------------------------------------------- |
+| `/`                   | Landing page com destaques de artistas                                |
+| `/artistas`           | Listagem de artistas com busca                                        |
+| `/artistas/[id]`      | Perfil público do artista (portfólio + serviços)                     |
+| `/portifolios/[id]`   | Detalhe de um trabalho do portfólio                                  |
+| `/login`              | Login                                                                 |
+| `/cadastro/artista`   | Cadastro de artista                                                   |
+| `/cadastro/cliente`   | Cadastro de cliente                                                   |
+| `/dashboard/artista`  | Dashboard do artista — perfil, portfólio, serviços e pedidos recebidos |
+| `/dashboard/cliente`  | Dashboard do cliente — perfil e pedidos                               |
 
 ---
 
 ## Melhorias Planejadas
 
-- Corrigir bugs nas queries SQL do backend (portfólio, serviço, pedido)
-- Migrar credenciais do banco para variáveis de ambiente
-- Adicionar endpoints POST para Portfólio, Serviço e Pedido
-- Ampliar cobertura de testes para os demais services (Portfólio, Serviço, Arte, Pedido) e adicionar testes de integração
+A auditoria de segurança em [`docs/metodos-invasao-e-correcoes.md`](docs/metodos-invasao-e-correcoes.md) lista o histórico completo. Os únicos itens genuinamente em aberto hoje dependem de infraestrutura de produção que este projeto (rodando localmente) não tem:
+
+- Migrar o rate limit de login para armazenamento distribuído (Redis) caso o backend passe a rodar em múltiplas instâncias.
+- Servir a aplicação por HTTPS real e ativar `COOKIE_SECURE=true` contra um domínio de produção.
 
 ---
 
 ## Licença
 
-Projeto de portfólio demonstrando arquitetura em camadas com Spring Boot. Livre para uso e modificação.
+Projeto de portfólio demonstrando arquitetura em camadas com Spring Boot, autenticação/autorização robusta e um processo real de auditoria de segurança. Livre para uso e modificação.
