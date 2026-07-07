@@ -8,29 +8,24 @@ import { Users, Search, Palette } from 'lucide-react'
 
 export default function ArtistasPage() {
   const [artistas, setArtistas] = useState<Artista[]>([])
-  const [filtered, setFiltered] = useState<Artista[]>([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     artistaService
       .findAll()
-      .then((data) => { setArtistas(data); setFiltered(data) })
+      .then((data) => setArtistas(data))
       .catch(() => setArtistas([]))
       .finally(() => setLoading(false))
   }, [])
 
-  useEffect(() => {
-    const q = search.toLowerCase()
-    setFiltered(
-      artistas.filter(
-        (a) =>
-          a.nome.toLowerCase().includes(q) ||
-          a.email.toLowerCase().includes(q) ||
-          (a.descricao && a.descricao.toLowerCase().includes(q))
-      )
-    )
-  }, [search, artistas])
+  const q = search.toLowerCase()
+  const filtered = artistas.filter(
+    (a) =>
+      a.nome.toLowerCase().includes(q) ||
+      a.email.toLowerCase().includes(q) ||
+      (a.descricao && a.descricao.toLowerCase().includes(q))
+  )
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
