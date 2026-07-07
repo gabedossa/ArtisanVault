@@ -4,6 +4,7 @@ import com.dossa.ArtisanVault.project.RowMapper.ArteRowMapper;
 import com.dossa.ArtisanVault.project.entity.Arte;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.BeanPropertyRowMapper;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -24,8 +25,12 @@ public class ArteRepository {
 
     // Encontrar Arte por ID;
     public Arte findById(Long id){
-        String sql ="SELECT * FROM arte WHERE id_artista = ?";
-        return jdbcTemplate.queryForObject(sql, new BeanPropertyRowMapper<>(Arte.class), id);
+        String sql ="SELECT * FROM arte WHERE id_arte = ?";
+        try {
+            return jdbcTemplate.queryForObject(sql, new ArteRowMapper(), id);
+        } catch (EmptyResultDataAccessException e) {
+            return null;
+        }
     }
 
     // Encontrar Arte por titulo;

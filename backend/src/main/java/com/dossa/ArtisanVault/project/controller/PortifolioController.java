@@ -79,13 +79,18 @@ public class PortifolioController {
     }
 
     @DeleteMapping("/delete/{id}")
-    public ResponseEntity<String> deleteById(@PathVariable Long id) {
-        int result = portServ.deleteById(id);
-
-        if (result > 0) {
-            return ResponseEntity.ok("portifolio excluído com sucesso.");
-        } else {
+    public ResponseEntity<String> deleteById(@PathVariable Long id, Authentication authentication) {
+        Portifolio existente = portServ.findById(id);
+        if (existente == null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body("portifolio não encontrado.");
         }
+
+        Optional<Artista> artistaOpt = artistaService.findByEmail(authentication.getName());
+        if (artistaOpt.isEmpty() || !existente.getId_artista().equals(artistaOpt.get().getIdArtista())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Você só pode remover seus próprios trabalhos.");
+        }
+
+        portServ.deleteById(id);
+        return ResponseEntity.ok("portifolio excluído com sucesso.");
     }
 }

@@ -3,6 +3,7 @@ package com.dossa.ArtisanVault.project.repository;
 import com.dossa.ArtisanVault.project.RowMapper.PortifolioRowMapper;
 import com.dossa.ArtisanVault.project.entity.Portifolio;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
@@ -26,7 +27,11 @@ public class PortifolioRepository {
     // Encontrar portifólio por ID;
     public Portifolio findById(Long id){
         String sql = "SELECT * FROM portfolio WHERE id_portfolio = ?";
-        return jdbcTemplate.queryForObject(sql, new PortifolioRowMapper(), id);
+        try {
+            return jdbcTemplate.queryForObject(sql, new PortifolioRowMapper(), id);
+        } catch (EmptyResultDataAccessException e) {
+            return null;
+        }
     }
 
     //Deletar portifolio por id

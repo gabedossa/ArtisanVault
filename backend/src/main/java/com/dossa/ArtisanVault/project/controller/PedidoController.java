@@ -153,14 +153,23 @@ public class PedidoController {
     }
 
     @DeleteMapping("/delete/{id}")
-    public ResponseEntity<String> deleteById(@PathVariable Long id) {
-        int result = pedidoService.deleteById(id);
-
-        if (result > 0) {
-            return ResponseEntity.ok("pedido excluído com sucesso.");
-        } else {
+    public ResponseEntity<String> deleteById(@PathVariable Long id, Authentication authentication) {
+        Pedido pedido = pedidoService.findById(id);
+        if (pedido == null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body("pedido não encontrado.");
         }
+
+        Optional<Cliente> clienteOpt = clienteService.findByEmail(authentication.getName());
+        Optional<Artista> artistaOpt = artistaService.findByEmail(authentication.getName());
+        boolean donoCliente = clienteOpt.isPresent() && pedido.getId_cliente().equals(clienteOpt.get().getIdCliente());
+        boolean donoArtista = artistaOpt.isPresent() && pedido.getId_artista().equals(artistaOpt.get().getIdArtista());
+
+        if (!donoCliente && !donoArtista) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Você não pode remover este pedido.");
+        }
+
+        pedidoService.deleteById(id);
+        return ResponseEntity.ok("pedido excluído com sucesso.");
     }
 
 }

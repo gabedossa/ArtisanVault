@@ -5,6 +5,7 @@ import com.dossa.ArtisanVault.project.service.ArtistaService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -47,7 +48,12 @@ public class ArtistaController {
 
     // Método para atualizar um artista existente
     @PutMapping("/{id}")
-    public ResponseEntity<String> update(@PathVariable Long id, @RequestBody Artista artista) {
+    public ResponseEntity<String> update(@PathVariable Long id, @RequestBody Artista artista, Authentication authentication) {
+        Optional<Artista> autenticado = artistaService.findByEmail(authentication.getName());
+        if (autenticado.isEmpty() || !autenticado.get().getIdArtista().equals(id)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Você só pode editar seu próprio perfil.");
+        }
+
         artista.setIdArtista(id);
         int result = artistaService.update(artista);
         if (result > 0) {
@@ -59,7 +65,12 @@ public class ArtistaController {
 
     // Método para excluir um artista por ID
     @DeleteMapping("/{id}")
-    public ResponseEntity<String> deleteById(@PathVariable Long id) {
+    public ResponseEntity<String> deleteById(@PathVariable Long id, Authentication authentication) {
+        Optional<Artista> autenticado = artistaService.findByEmail(authentication.getName());
+        if (autenticado.isEmpty() || !autenticado.get().getIdArtista().equals(id)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Você só pode remover sua própria conta.");
+        }
+
         int result = artistaService.deleteById(id);
         if (result > 0) {
             return ResponseEntity.ok("Artista excluído com sucesso");
