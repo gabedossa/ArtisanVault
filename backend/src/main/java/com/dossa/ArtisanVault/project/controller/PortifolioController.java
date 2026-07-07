@@ -1,5 +1,6 @@
 package com.dossa.ArtisanVault.project.controller;
 
+import com.dossa.ArtisanVault.project.dto.PortifolioPublicResponse;
 import com.dossa.ArtisanVault.project.entity.Artista;
 import com.dossa.ArtisanVault.project.entity.Portifolio;
 import com.dossa.ArtisanVault.project.service.ArtistaService;
@@ -16,6 +17,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/portifolio")
@@ -29,16 +31,22 @@ public class PortifolioController {
     @Autowired
     private ImageStorageService imageStorageService;
 
-    //Listando portfólios (trabalhos)
+    //Listando portfólios (trabalhos) - resposta pública não inclui id_cliente/id_pedido
     @GetMapping
-    public List<Portifolio> findAlls(){
-        return portServ.findAll();
+    public List<PortifolioPublicResponse> findAlls(){
+        return portServ.findAll().stream()
+                .map(PortifolioPublicResponse::new)
+                .collect(Collectors.toList());
     }
 
-    //Listando portfólio por id
+    //Listando portfólio por id - resposta pública não inclui id_cliente/id_pedido
     @GetMapping("/{id}")
-    public Portifolio findById(@PathVariable Long id){
-        return portServ.findById(id);
+    public ResponseEntity<PortifolioPublicResponse> findById(@PathVariable Long id){
+        Portifolio portifolio = portServ.findById(id);
+        if (portifolio == null) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok(new PortifolioPublicResponse(portifolio));
     }
 
     //Criando um novo trabalho (imagem + título + descrição)
