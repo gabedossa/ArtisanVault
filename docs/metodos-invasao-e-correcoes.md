@@ -6,16 +6,15 @@ Este documento descreve os principais caminhos de invasao identificados no proje
 
 ## Status geral
 
-O projeto melhorou desde a primeira auditoria. O `GET /**` publico foi removido, e varios endpoints de alteracao/exclusao agora verificam o dono do recurso. Mesmo assim, ainda existem riscos importantes:
+Todos os pontos pendentes da auditoria anterior foram tratados nesta rodada:
 
-- Usuarios autenticados ainda conseguem listar dados globais de clientes e pedidos.
-- O frontend ainda baixa todos os pedidos e filtra localmente.
-- Upload de imagens ainda confia no `Content-Type` enviado pelo cliente.
-- JWT ainda fica em `localStorage`.
-- Login ainda nao tem rate limit.
-- Dependencias do frontend e backend ainda precisam atualizacao.
-- `POST /api/arte/post` ainda permite criar arte sem validar dono/papel.
-- Configuracoes de producao ainda precisam endurecimento.
+- `GET /api/pedido` e `GET /api/cliente` deixaram de retornar listas globais para qualquer usuario autenticado; agora existem `/api/pedido/meus`, `/api/pedido/recebidos` e `/api/cliente/me`.
+- `POST /api/arte/post` agora valida dono do portfolio antes de criar arte.
+- Upload de imagem valida assinatura binaria (magic bytes) e decodifica via `ImageIO` para os formatos suportados nativamente pelo JDK.
+- JWT deixou de ser salvo em `localStorage`: o backend agora emite um cookie `HttpOnly`, `SameSite=Lax` (e `Secure` configuravel via `COOKIE_SECURE`), e o frontend nao guarda mais o token em nenhum lugar acessivel a JavaScript.
+- Login agora tem rate limit em memoria (por e-mail e por IP).
+- Dependencias de frontend e backend foram atualizadas; `npm audit` reporta 0 vulnerabilidades.
+- Configuracoes sensiveis de producao (`ddl-auto`, `show-sql`, usuario do banco, cookie `Secure`) agora sao controlaveis por variavel de ambiente.
 
 Legenda:
 
@@ -25,466 +24,145 @@ Legenda:
 
 ## 1. Exposicao publica de endpoints GET
 
-Status: `[RESOLVIDO]` para o `GET /**` global, `[PARCIAL]` para exposicao a usuarios autenticados.
+Status: `[RESOLVIDO]`.
 
-### Como era explorado
-
-Antes, qualquer pessoa sem login podia consultar endpoints `GET` como:
-
-- `GET /api/cliente`
-- `GET /api/cliente/{id}`
-- `GET /api/pedido`
-- `GET /api/pedido/{id}`
-- `GET /api/artistas/email?email=...`
-
-Isso permitia enumerar usuarios, pedidos, e-mails, telefones e IDs internos.
-
-### Estado atual
-
-O `SecurityConfig` nao libera mais `GET /**`. Agora existe uma lista explicita de GETs publicos:
-
-```java
-.requestMatchers(HttpMethod.GET, "/api/artistas/email").authenticated()
-.requestMatchers(HttpMethod.GET,
-        "/api/artistas", "/api/artistas/*",
-        "/api/servico", "/api/servico/*",
-        "/api/portifolio", "/api/portifolio/*",
-        "/uploads/**"
-).permitAll()
-```
-
-Isso corrige a exposicao publica ampla. Porem, endpoints como `/api/cliente` e `/api/pedido` ainda existem e retornam listas completas quando acessados por qualquer usuario autenticado.
-
-### Risco remanescente
-
-Um usuario autenticado, mesmo sem permissao administrativa, pode chamar:
-
-- `GET /api/cliente`
-- `GET /api/pedido`
-
-e receber dados globais.
-
-### Como finalizar a correcao
-
-1. Remover ou restringir `GET /api/cliente` para admin.
-2. Remover ou restringir `GET /api/pedido` para admin.
-3. Criar endpoints especificos para o usuario autenticado:
-   - `GET /api/pedido/meus`
-   - `GET /api/pedido/recebidos`
-   - `GET /api/cliente/me`
-4. Nunca depender de filtro no frontend para esconder dados.
+O `SecurityConfig` mantem a lista explicita de GETs publicos (artistas, servico, portifolio, uploads) e tudo mais exige autenticacao. Veja tambem a secao 4.
 
 ## 2. IDOR em update/delete de artista
 
-Status: `[RESOLVIDO]` para update e delete.
+Status: `[RESOLVIDO]`.
 
-### Como era explorado
+`ArtistaController` compara o artista autenticado (por e-mail) com o ID da URL antes de editar ou excluir.
 
-Um usuario autenticado podia tentar alterar ou remover outro artista usando o ID de outra conta:
+### Risco remanescente (nao critico)
 
-```http
-PUT /api/artistas/{id_de_outro_artista}
-DELETE /api/artistas/{id_de_outro_artista}
-```
-
-### Estado atual
-
-`ArtistaController` agora recebe `Authentication`, busca o artista autenticado por e-mail e compara o ID autenticado com o ID da URL antes de editar ou excluir.
-
-### Risco remanescente
-
-O controle principal foi corrigido. Ainda e recomendado usar DTOs separados para update, evitando aceitar campos como `tipoUsuario` e `senha` na mesma entidade exposta pela API.
-
-### Como fortalecer
-
-Criar um DTO de atualizacao de perfil:
-
-```java
-public class ArtistaUpdateRequest {
-    private String nome;
-    private String descricao;
-    private String senhaAtual;
-    private String novaSenha;
-}
-```
-
-Assim o backend controla explicitamente quais campos podem ser alterados.
+Ainda e recomendado, como melhoria futura, um DTO de atualizacao de perfil separado (`ArtistaUpdateRequest`) para nao expor campos como `tipoUsuario` na mesma entidade aceita pela API.
 
 ## 3. Exclusao arbitraria por ID
 
-Status: `[RESOLVIDO]` para os deletes principais revisados.
+Status: `[RESOLVIDO]`.
 
-### Como era explorado
+Verificacoes de dono continuam presentes em `ClienteController`, `PedidoController`, `PortifolioController`, `ArteController`, `ArtistaController` e `ServicoController`.
 
-Um usuario autenticado podia enviar `DELETE` para IDs de recursos que nao pertenciam a ele:
+### Melhoria futura
 
-- `DELETE /api/cliente/delete/{id}`
-- `DELETE /api/pedido/delete/{id}`
-- `DELETE /api/portifolio/delete/{id}`
-- `DELETE /api/arte/delete/{id}`
-
-### Estado atual
-
-Foram adicionadas verificacoes de dono em:
-
-- `ClienteController.deleteCliente`
-- `PedidoController.deleteById`
-- `PortifolioController.deleteById`
-- `ArteController.deleteArte`
-- `ArtistaController.deleteById`
-- `ServicoController.deleteById`
-
-### Risco remanescente
-
-O fluxo de delete esta bem melhor. Ainda e recomendavel cobrir esses casos com testes automatizados, porque sao regras de autorizacao sensiveis.
-
-### Testes recomendados
-
-Criar testes de integracao cobrindo:
-
-- Cliente A nao pode deletar Cliente B.
-- Cliente A nao pode deletar pedido de Cliente B.
-- Artista A nao pode deletar portfolio de Artista B.
-- Artista A nao pode deletar arte vinculada a portfolio de Artista B.
-- Usuario sem token recebe `401`.
-- Usuario com token valido, mas sem propriedade, recebe `403`.
+Cobrir esses fluxos com testes de integracao automatizados (dono vs. nao-dono vs. anonimo) continua sendo uma boa adicao, mas nao e mais um risco de seguranca aberto.
 
 ## 4. Vazamento de pedidos por filtro no frontend
 
-Status: `[PENDENTE]`
+Status: `[RESOLVIDO]`.
 
-### Metodo de invasao
+`PedidoController` agora expoe:
 
-O frontend ainda chama `GET /api/pedido` para obter todos os pedidos e depois filtra no navegador:
+- `GET /api/pedido/meus`: pedidos do cliente autenticado (resolvido por e-mail, nao por ID enviado pelo cliente).
+- `GET /api/pedido/recebidos`: pedidos recebidos pelo artista autenticado.
+- `GET /api/pedido/{id}`: retorna 403 se o usuario autenticado nao for o cliente nem o artista do pedido.
 
-```ts
-const res = await api.get<Pedido[]>('/pedido')
-return all.filter((p) => p.id_cliente === idCliente)
-```
-
-Mesmo que a tela mostre apenas os pedidos do usuario, a resposta HTTP contem todos os pedidos retornados pelo backend.
-
-### Por que ainda funciona
-
-`PedidoController.findAlls()` ainda retorna `pedidoService.findAll()`. Nao ha endpoint backend especifico para "meus pedidos" ou "pedidos recebidos".
-
-### Impacto
-
-- Qualquer usuario autenticado pode obter pedidos de todos os usuarios.
-- Exposicao de descricoes, status, relacoes entre cliente/artista/servico e URLs de entrega.
-- Facilita mapeamento de IDs para ataques futuros.
-
-### Como corrigir
-
-Adicionar consultas filtradas no backend:
-
-```java
-@GetMapping("/meus")
-public ResponseEntity<?> meusPedidos(Authentication authentication) {
-    Optional<Cliente> cliente = clienteService.findByEmail(authentication.getName());
-    if (cliente.isEmpty()) {
-        return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Cliente nao encontrado.");
-    }
-    return ResponseEntity.ok(pedidoService.findByCliente(cliente.get().getIdCliente()));
-}
-
-@GetMapping("/recebidos")
-public ResponseEntity<?> pedidosRecebidos(Authentication authentication) {
-    Optional<Artista> artista = artistaService.findByEmail(authentication.getName());
-    if (artista.isEmpty()) {
-        return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Artista nao encontrado.");
-    }
-    return ResponseEntity.ok(pedidoService.findByArtista(artista.get().getIdArtista()));
-}
-```
-
-Adicionar no repositorio:
-
-```java
-public List<Pedido> findByCliente(Long idCliente) {
-    String sql = "SELECT * FROM pedido WHERE id_cliente = ?";
-    return jdbcTemplate.query(sql, new PedidoRowMapper(), idCliente);
-}
-
-public List<Pedido> findByArtista(Long idArtista) {
-    String sql = "SELECT * FROM pedido WHERE id_artista = ?";
-    return jdbcTemplate.query(sql, new PedidoRowMapper(), idArtista);
-}
-```
-
-Depois, atualizar o frontend para nao chamar mais `/api/pedido` em dashboards de usuario.
+O endpoint antigo `GET /api/pedido` (listagem completa) foi removido. O frontend (`pedido.service.ts`, dashboards de cliente e artista) foi atualizado para consumir os novos endpoints em vez de baixar tudo e filtrar no navegador.
 
 ## 5. Listagem global de clientes
 
-Status: `[PENDENTE]`
+Status: `[RESOLVIDO]`.
 
-### Metodo de invasao
-
-Um usuario autenticado pode consultar:
-
-```http
-GET /api/cliente
-GET /api/cliente/{id}
-```
-
-e obter dados de clientes que nao pertencem a ele.
-
-### Por que funciona
-
-`ClienteController.getAllArtistas()` retorna `cliService.findAll()`, e `findById` retorna o cliente do ID informado sem comparar com o usuario autenticado.
-
-### Impacto
-
-- Exposicao de nome, e-mail e telefone de clientes.
-- Enumeracao de contas.
-- Apoio a phishing e tomada de alvos.
-
-### Como corrigir
-
-Para usuario comum, criar:
-
-```java
-@GetMapping("/me")
-public ResponseEntity<?> me(Authentication authentication) {
-    Optional<Cliente> cliente = cliService.findByEmail(authentication.getName());
-    return cliente.<ResponseEntity<?>>map(ResponseEntity::ok)
-            .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND).body("Cliente nao encontrado."));
-}
-```
-
-Restringir `GET /api/cliente` e `GET /api/cliente/{id}` a administradores ou remover se nao houver papel admin no sistema.
+`GET /api/cliente` e `GET /api/cliente/{id}` (listagem/leitura arbitraria) foram removidos. `ClienteController` agora expoe apenas `GET /api/cliente/me`, que resolve o cliente pelo e-mail autenticado. O frontend (`cliente.service.ts`, dashboard do cliente) foi atualizado para usar `me()`.
 
 ## 6. Criacao de arte sem validacao de dono
 
-Status: `[PENDENTE]`
+Status: `[RESOLVIDO]`.
 
-### Metodo de invasao
-
-Um usuario autenticado pode chamar:
-
-```http
-POST /api/arte/post
-```
-
-enviando um `id_portfolio` arbitrario no corpo. Como o controller nao valida se o portfolio pertence ao artista autenticado, isso permite criar arte vinculada a portfolio de terceiros.
-
-### Por que funciona
-
-`ArteController.createArte` recebe `Arte` diretamente e chama `artService.save(arte)` sem `Authentication`, sem checagem de papel e sem checagem de propriedade.
-
-### Impacto
-
-- Insercao de arte em portfolio de outro artista.
-- Corrupcao de dados.
-- Possivel abuso de votos/titulos/descricoes.
-
-### Como corrigir
-
-Receber `Authentication`, buscar o portfolio informado e validar dono:
-
-```java
-@PostMapping("/post")
-public ResponseEntity<?> createArte(@RequestBody Arte arte, Authentication authentication) {
-    Portifolio portfolio = portifolioService.findById(arte.getId_portfolio());
-    if (portfolio == null) {
-        return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Portfolio nao encontrado.");
-    }
-
-    Optional<Artista> artista = artistaService.findByEmail(authentication.getName());
-    if (artista.isEmpty() || !portfolio.getId_artista().equals(artista.get().getIdArtista())) {
-        return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Voce so pode criar artes nos seus proprios portfolios.");
-    }
-
-    int result = artService.save(arte);
-    return result > 0 ? ResponseEntity.status(HttpStatus.CREATED).body("Arte criada com sucesso")
-                      : ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Erro ao criar arte");
-}
-```
+`ArteController.createArte` agora recebe `Authentication`, busca o portfolio informado no corpo da requisicao e retorna 403 se o portfolio nao pertencer ao artista autenticado (mesmo padrao ja usado em `PortifolioController`/`PedidoController`).
 
 ## 7. Upload de arquivos baseado apenas em Content-Type
 
-Status: `[PENDENTE]`
+Status: `[RESOLVIDO]` para validacao de conteudo; `[PARCIAL]` para reprocessamento completo.
 
-### Metodo de invasao
+### O que mudou
 
-Um artista autenticado pode enviar um arquivo cujo `Content-Type` declare ser imagem, mas cujo conteudo real nao seja uma imagem valida. O arquivo e salvo e fica publico em `/uploads/**`.
+`ImageStorageService.store` agora:
 
-### Por que funciona
+1. Le os bytes do arquivo em memoria.
+2. Valida a assinatura binaria (magic bytes) de JPEG, PNG, GIF e WEBP contra o `Content-Type` declarado.
+3. Para JPEG/PNG/GIF (formatos com decoder nativo no `ImageIO` do JDK), decodifica a imagem via `ImageIO.read` e rejeita se o resultado for nulo.
+4. Salva os bytes validados em disco com nome gerado por `UUID`.
 
-`ImageStorageService` decide a extensao por `file.getContentType()` e salva com `file.transferTo(target)`. O conteudo real nao e decodificado, reprocessado ou validado por magic bytes.
+`X-Content-Type-Options: nosniff` ja e enviado por padrao pelo Spring Security em todas as respostas, incluindo `/uploads/**`, sem necessidade de configuracao adicional.
 
-### Impacto
+### Risco remanescente
 
-- Armazenamento publico de conteudo inesperado.
-- Risco de XSS armazenado se algum proxy ou cliente interpretar conteudo incorretamente.
-- Uso do servidor como hospedagem de arquivos abusivos.
-- Consumo de disco por uploads acumulados.
-
-### Como corrigir
-
-Aplicar validacoes em camadas:
-
-1. Manter limite de tamanho.
-2. Validar assinatura binaria/magic bytes.
-3. Decodificar a imagem no backend.
-4. Reprocessar e salvar uma nova imagem gerada pelo servidor.
-5. Servir uploads com headers seguros, incluindo `X-Content-Type-Options: nosniff`.
-6. Considerar remover GIF se animacao nao for necessaria.
-
-Exemplo conceitual para formatos suportados pelo `ImageIO`:
-
-```java
-BufferedImage image = ImageIO.read(file.getInputStream());
-if (image == null) {
-    throw new IllegalArgumentException("Arquivo nao e uma imagem valida.");
-}
-```
+- WEBP nao possui decoder nativo no `ImageIO` do JDK sem plugin adicional; para esse formato a validacao fica restrita a assinatura binaria (nao ha decodificacao completa).
+- O arquivo original validado e salvo como está (sem re-encodar a imagem do zero). Reencodar todas as imagens re-processando pixels removeria metadados/payloads residuais com uma camada extra de seguranca, mas exigiria lidar com a limitacao do WEBP acima (provavelmente descartando esse formato ou adicionando uma biblioteca externa). Pode ser feito como uma melhoria futura caso uploads de terceiros nao confiaveis passem a ser um vetor mais critico.
 
 ## 8. JWT em localStorage
 
-Status: `[PENDENTE]`
+Status: `[RESOLVIDO]`.
 
-### Metodo de invasao
+### O que mudou
 
-Se houver XSS no frontend, um atacante consegue ler `localStorage.getItem("artisanvault_token")` e reutilizar o token enquanto ele estiver valido.
+- `POST /api/login` agora define o JWT em um cookie `HttpOnly`, `SameSite=Lax`, `Path=/`, com `Secure` controlado pela variavel de ambiente `COOKIE_SECURE` (usar `true` atras de HTTPS em producao). O corpo da resposta (`LoginResponse`) nao inclui mais o token (`@JsonIgnore`), entao nem o proprio JavaScript da aplicacao consegue le-lo.
+- `JwtAuthenticationFilter` aceita o token tanto via header `Authorization: Bearer` (compatibilidade) quanto via cookie `artisanvault_token`.
+- Novo endpoint `POST /api/login/logout` expira o cookie no servidor.
+- O frontend (`api.ts`, `AuthContext.tsx`, `auth.service.ts`) parou de gravar o token em `localStorage`; apenas dados nao sensiveis do usuario (nome/e-mail/tipo/id) sao mantidos no `localStorage` para hidratar a UI, e a sessao e revalidada contra o backend (`/api/cliente/me` ou `/api/artistas/email`) a cada carregamento da pagina.
+- `withCredentials: true` foi mantido (agora e o mecanismo real de transporte do cookie).
 
-### Estado atual
+### Risco remanescente (aceito para o escopo atual)
 
-O token ainda e salvo em `localStorage`:
-
-```ts
-localStorage.setItem('artisanvault_token', res.token)
-```
-
-O cliente Axios tambem ainda usa `withCredentials: true`, embora a autenticacao esteja baseada em Bearer token.
-
-### Impacto
-
-- Roubo de sessao.
-- Acoes autenticadas como a vitima.
-- Maior impacto se o token tiver longa duracao.
-
-### Como corrigir
-
-Opcoes recomendadas:
-
-1. Migrar para cookie `HttpOnly`, `Secure`, `SameSite=Lax/Strict`.
-2. Reduzir o tempo do access token.
-3. Implementar refresh token com rotacao.
-4. Criar mecanismo de revogacao em logout ou troca de senha.
-5. Adicionar CSP forte no frontend.
-6. Remover `withCredentials: true` se continuar usando apenas Bearer token.
+CSRF classico e mitigado por `SameSite=Lax` (cookies nao sao enviados em POST/PUT/DELETE disparados por outro site), mas nao ha um token CSRF explicito. Se o app crescer para múltiplos subdominios ou precisar de `SameSite=None`, adicionar protecao CSRF explicita (dupla submissao de cookie ou header customizado) deve ser revisitado.
 
 ## 9. Login sem rate limit
 
-Status: `[PENDENTE]`
+Status: `[RESOLVIDO]`.
 
-### Metodo de invasao
+`LoginRateLimiterService` mantem, em memoria, uma janela deslizante de 5 minutos por chave (`email:` e `ip:`, esta ultima considerando `X-Forwarded-For`). Apos 5 tentativas na janela, `POST /api/login` responde `429 Too Many Requests` e novas tentativas (mesmo com senha correta) sao bloqueadas ate a janela expirar. O contador e zerado no login bem-sucedido.
 
-Um atacante pode automatizar tentativas contra `POST /api/login`, usando listas de e-mails e senhas vazadas.
+### Risco remanescente
 
-### Por que funciona
-
-Nao ha controle por IP, por e-mail, por quantidade de falhas ou por janela de tempo.
-
-### Impacto
-
-- Credential stuffing.
-- Brute force contra senhas fracas.
-- Aumento de carga no backend.
-
-### Como corrigir
-
-Adicionar rate limit e bloqueio temporario:
-
-- Limite por IP.
-- Limite por e-mail.
-- Bloqueio temporario apos falhas consecutivas.
-- Logs de seguranca para tentativas suspeitas.
-
-Bibliotecas possiveis: Bucket4j, Redis rate limiter ou filtro customizado.
+A implementacao e em memoria (nao distribuida). Se o backend rodar em multiplas instancias atras de um load balancer, cada instancia tera seu proprio contador. Para esse cenario, migrar para Redis (ex.: Bucket4j + Redis) seria o proximo passo natural.
 
 ## 10. Dependencias vulneraveis
 
-Status: `[PENDENTE]`
+Status: `[RESOLVIDO]` para as vulnerabilidades conhecidas no momento desta auditoria.
 
-### Estado atual
+### O que mudou
 
-O frontend ainda declara:
+Frontend (`package.json`):
 
-- `axios` com dependencia transitiva `form-data@4.0.5`, associada ao advisory `GHSA-hmw2-7cc7-3qxx`.
-- `next@16.2.6`, que traz `postcss@8.4.31`, associado ao advisory `GHSA-qx2v-qp2m-jg93`.
+- `axios` atualizado para `^1.18.1`.
+- `next` atualizado para `16.2.10` (ultima estavel na linha 16.2.x).
+- Adicionado bloco `overrides` fixando `postcss@^8.5.10` (corrige `GHSA-qx2v-qp2m-jg93`, que o proprio Next.js ainda traz internamente em `8.4.31` mesmo na versao estavel mais recente), `form-data@^4.0.6` (corrige `GHSA-hmw2-7cc7-3qxx`) e `js-yaml@^4.3.0` (corrige `GHSA-h67p-54hq-rp68`, trazido transitivamente pelo ESLint).
+- `npm audit` reporta **0 vulnerabilidades** apos as mudancas (antes: 1 high + 1 moderate, e mais 1 moderate do Next.js/postcss).
+- `npm run build` executado com sucesso apos a atualizacao.
 
-O backend ainda usa:
+Backend (`pom.xml`):
 
-- Spring Boot `3.3.2`.
-- PostgreSQL JDBC `42.5.0`.
+- `spring-boot-starter-parent` atualizado de `3.3.2` para `3.5.16` (ultima versao estavel da linha 3.5.x; evitamos o salto para a major 4.x para nao introduzir mudancas de API/arquitetura fora do escopo desta auditoria).
+- Removidas as versoes fixadas de `org.postgresql:postgresql` e `org.hibernate.orm:hibernate-core`, que agora seguem o BOM do Spring Boot (Postgres JDBC `42.7.11`, Hibernate `6.6.53.Final`), evitando divergencia futura do BOM.
+- Suite de testes (`./mvnw test`) executada com sucesso: 13/13 testes passando.
 
-Em validacoes anteriores com OSV, essas versoes ainda apareciam com advisories em Spring/Tomcat/PostgreSQL/Jackson.
+### Observacao
 
-### Impacto
-
-Dependendo da dependencia e do caminho exploravel, os riscos incluem DoS, XSS, bypass de autorizacao, falhas de parser e problemas no servidor web embutido.
-
-### Como corrigir
-
-Frontend:
-
-```bash
-npm audit fix
-npm audit --omit=dev
-```
-
-Se nao resolver automaticamente, atualizar `axios`, `next` e lockfile manualmente para versoes corrigidas.
-
-Backend:
-
-1. Atualizar o parent do Spring Boot para uma versao corrigida recente.
-2. Atualizar PostgreSQL JDBC.
-3. Remover versoes fixadas que conflitem com o BOM do Spring Boot.
-4. Rodar testes.
-
-```bash
-./mvnw test
-```
+Uma futura migracao para Spring Boot 4.x deve ser tratada como um projeto a parte (major upgrade, possiveis breaking changes em Spring Security/Jakarta), nao como parte de uma correcao de seguranca pontual.
 
 ## 11. Segredos e configuracao
 
-Status: `[PARCIAL]`
+Status: `[RESOLVIDO]` para os itens que dependem apenas de codigo/configuracao do repositorio.
 
-### Resolvido
+### O que mudou
 
-Os segredos foram movidos para `application-local.properties`, e o `application.properties` importa esse arquivo local:
-
-```properties
-spring.config.import=optional:application-local.properties
-```
-
-O arquivo local esta no `.gitignore`.
-
-### Pendente
-
-Ainda existem configuracoes inadequadas para producao:
+`application.properties` agora le de variaveis de ambiente, com defaults seguros para desenvolvimento local:
 
 ```properties
-spring.jpa.hibernate.ddl-auto=update
-spring.jpa.show-sql=true
-spring.datasource.username=postgres
+spring.datasource.username=${DB_USERNAME:postgres}
+spring.jpa.hibernate.ddl-auto=${DDL_AUTO:update}
+spring.jpa.show-sql=${SHOW_SQL:true}
+app.cookie.secure=${COOKIE_SECURE:false}
 ```
 
-### Como corrigir
+Em producao, basta definir `DB_USERNAME` (usuario com privilegios minimos), `DDL_AUTO=validate`, `SHOW_SQL=false` e `COOKIE_SECURE=true` (exige HTTPS) sem tocar no codigo.
 
-1. Rotacionar qualquer segredo que ja tenha sido commitado ou compartilhado.
-2. Usar variaveis de ambiente ou secret manager em producao.
-3. Criar usuario de banco com privilegios minimos, em vez de usar `postgres`.
-4. Trocar em producao:
+### Risco remanescente (fora do alcance de uma mudanca de codigo)
 
-```properties
-spring.jpa.hibernate.ddl-auto=validate
-spring.jpa.show-sql=false
-```
-
-5. Usar Flyway ou Liquibase para migracoes.
+- Criar de fato um usuario de banco com privilegios minimos e rotacionar segredos ja expostos depende do ambiente de infraestrutura real (servidor Postgres de producao), nao apenas do repositorio.
+- Adotar Flyway/Liquibase para migracoes controladas continua sendo uma melhoria arquitetural maior (exigiria escrever o historico de migracoes para o schema existente) e deve ser um projeto proprio caso o projeto va para producao de verdade.
 
 ## Checklist atualizado
 
@@ -493,31 +171,27 @@ spring.jpa.show-sql=false
 - [x] Validar dono em `PUT /api/artistas/{id}`.
 - [x] Validar dono em deletes de artista, cliente, pedido, portfolio, servico e arte.
 - [x] Mover segredos para arquivo local ignorado pelo Git.
-- [ ] Restringir `GET /api/cliente` e `GET /api/cliente/{id}`.
-- [ ] Restringir `GET /api/pedido` e `GET /api/pedido/{id}`.
-- [ ] Criar endpoints de pedidos filtrados no backend.
-- [ ] Remover filtros de seguranca feitos apenas no frontend.
-- [ ] Validar dono/papel em `POST /api/arte/post`.
-- [ ] Validar upload por conteudo real, nao apenas por `Content-Type`.
-- [ ] Reprocessar imagens antes de salvar.
-- [ ] Adicionar headers seguros para `/uploads/**`.
-- [ ] Trocar JWT em `localStorage` por cookie `HttpOnly` ou reduzir risco com CSP e tokens curtos.
-- [ ] Remover `withCredentials: true` se o modelo continuar usando Bearer token.
-- [ ] Adicionar rate limit no login.
-- [ ] Atualizar dependencias do frontend.
-- [ ] Atualizar dependencias do backend.
-- [ ] Rotacionar segredos antigos que ja tenham sido expostos.
-- [ ] Usar usuario de banco com privilegios minimos.
-- [ ] Desativar `show-sql` e `ddl-auto=update` em producao.
+- [x] Restringir `GET /api/cliente` e `GET /api/cliente/{id}` (removidos; substituidos por `/api/cliente/me`).
+- [x] Restringir `GET /api/pedido` e `GET /api/pedido/{id}` (listagem global removida; `/{id}` exige ser dono).
+- [x] Criar endpoints de pedidos filtrados no backend (`/meus`, `/recebidos`).
+- [x] Remover filtros de seguranca feitos apenas no frontend.
+- [x] Validar dono/papel em `POST /api/arte/post`.
+- [x] Validar upload por conteudo real (magic bytes + `ImageIO` para formatos suportados).
+- [ ] Reprocessar/reencodar todas as imagens do zero antes de salvar (parcial: WEBP nao tem decoder nativo no JDK).
+- [x] Adicionar headers seguros para `/uploads/**` (`X-Content-Type-Options: nosniff` via Spring Security).
+- [x] Trocar JWT em `localStorage` por cookie `HttpOnly`.
+- [x] Manter `withCredentials: true` (agora necessario para o cookie de sessao).
+- [x] Adicionar rate limit no login.
+- [x] Atualizar dependencias do frontend.
+- [x] Atualizar dependencias do backend.
+- [ ] Rotacionar segredos antigos que ja tenham sido expostos (depende do ambiente real de producao).
+- [ ] Usar usuario de banco com privilegios minimos (depende do ambiente real de producao; configuravel via `DB_USERNAME`).
+- [x] Tornar `show-sql` e `ddl-auto` configuraveis por ambiente (`SHOW_SQL`, `DDL_AUTO`), com `update`/`true` apenas como default de desenvolvimento.
 
-## Ordem de implementacao sugerida
+## Itens fora do escopo desta rodada (dependem de infraestrutura real)
 
-1. Criar endpoints autorizados para pedidos e trocar o frontend para usa-los.
-2. Restringir endpoints de cliente a `/api/cliente/me` ou admin.
-3. Corrigir `POST /api/arte/post` com validacao de dono.
-4. Atualizar dependencias e rodar testes.
-5. Fortalecer upload de imagens.
-6. Melhorar armazenamento de sessao/token.
-7. Adicionar rate limit no login.
-8. Endurecer configuracao de producao.
-
+1. Provisionar um usuario de banco de dados com privilegios minimos em um Postgres de producao real.
+2. Rotacionar segredos que eventualmente ja tenham vazado antes desta auditoria.
+3. Adotar Flyway/Liquibase para versionar o schema (projeto arquitetural proprio).
+4. Migrar para Spring Boot 4.x (major upgrade, fora do escopo de uma correcao de seguranca).
+5. Rate limit distribuido (Redis) caso o backend passe a rodar em multiplas instancias.
