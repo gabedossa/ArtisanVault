@@ -6,21 +6,30 @@ Este documento descreve os principais caminhos de invasao identificados no proje
 
 ## Status geral
 
-Todos os pontos pendentes da auditoria anterior foram tratados nesta rodada:
+Todos os pontos praticaveis dentro do repositorio (sem depender de infraestrutura real de producao) foram tratados. Isso inclui os itens desta rodada:
 
-- `GET /api/pedido` e `GET /api/cliente` deixaram de retornar listas globais para qualquer usuario autenticado; agora existem `/api/pedido/meus`, `/api/pedido/recebidos` e `/api/cliente/me`.
-- `POST /api/arte/post` agora valida dono do portfolio antes de criar arte.
-- Upload de imagem valida assinatura binaria (magic bytes) e decodifica via `ImageIO` para os formatos suportados nativamente pelo JDK.
-- JWT deixou de ser salvo em `localStorage`: o backend agora emite um cookie `HttpOnly`, `SameSite=Lax` (e `Secure` configuravel via `COOKIE_SECURE`), e o frontend nao guarda mais o token em nenhum lugar acessivel a JavaScript.
-- Login agora tem rate limit em memoria (por e-mail e por IP).
-- Dependencias de frontend e backend foram atualizadas; `npm audit` reporta 0 vulnerabilidades.
-- Configuracoes sensiveis de producao (`ddl-auto`, `show-sql`, usuario do banco, cookie `Secure`) agora sao controlaveis por variavel de ambiente.
+- `GET /api/artistas/me` nao existia como tal; em vez disso, foi criado `GET /api/login/me`, que resolve a identidade autenticada (e-mail/tipo/id/nome) direto do backend a partir do JWT, cobrindo tanto artista quanto cliente. O frontend (`AuthContext.tsx`) parou de usar `localStorage` para reconstruir a identidade da sessao e passou a chamar esse endpoint a cada carregamento.
+- Investigadas as entidades expostas diretamente pela API (`Artista`, `Cliente`, `Portifolio`, `Servico`, `Arte`, `Pedido`): a unica exposicao publica indevida encontrada foi `id_cliente`/`id_pedido` em `GET /api/portifolio` e `GET /api/portifolio/{id}`, que ja foi corrigida com um DTO publico dedicado. Os demais casos (`Cliente`, `Pedido`) so sao retornados para o proprio dono depois das correcoes anteriores, e `senha` ja e `@JsonProperty(WRITE_ONLY)` em `Artista`/`Cliente`. Ver secao 2/3 para o detalhamento e a justificativa de nao criar DTOs onde nao ha exposicao real.
+- Removido `artistaService.login(email, senha)` do frontend: metodo morto que chamava `/api/artistas/login`, endpoint que nunca existiu no backend (nunca era invocado por nenhuma tela).
+- O rate limit de login agora so confia no header `X-Forwarded-For` quando `TRUST_PROXY_HEADERS=true` estiver definido; por padrao usa o IP real da conexao TCP, evitando que um cliente falsifique o header para contornar o limite por IP.
+- Adicionados testes automatizados de seguranca: autorizacao (dono/nao-dono/nao-encontrado) em `ArteController` e `PedidoController`, validacao de upload invalido/valido em `ImageStorageService`, e comportamento do rate limiter em `LoginRateLimiterService`.
 
 Legenda:
 
 - `[RESOLVIDO]`: o ponto principal foi tratado no codigo atual.
 - `[PARCIAL]`: houve melhora, mas ainda existe risco remanescente.
 - `[PENDENTE]`: o risco continua aberto.
+- `[AVALIADO/NAO E PROBLEMA]`: investigado e descartado como risco real neste projeto, com justificativa.
+
+## O que ainda falta ajustar
+
+Itens genuinamente pendentes, todos dependentes de infraestrutura real ou de uma decisao de produto que ainda nao existe neste projeto:
+
+1. `[PENDENTE]` Reprocessar/reencodar todas as imagens do zero antes de salvar. WEBP nao tem decoder nativo no `ImageIO` do JDK, entao hoje so tem validacao por assinatura binaria para esse formato (ver secao 7).
+2. `[PENDENTE]` Adicionar protecao CSRF explicita **se** a politica de cookie mudar (`SameSite=None`, subdominios, etc.). Hoje `SameSite=Lax` ja mitiga o cenario atual de origem unica.
+3. `[PENDENTE]` Migrar o rate limit para armazenamento distribuido (Redis/Bucket4j) se o backend passar a rodar em multiplas instancias atras de um load balancer.
+4. `[PENDENTE]` Fechar configuracao real de producao: rotacionar segredos antigos, criar usuario de banco com privilegios minimos, definir `DDL_AUTO=validate`, `SHOW_SQL=false`, `COOKIE_SECURE=true`, `TRUST_PROXY_HEADERS=true` (se houver proxy confiavel na frente) e servir tudo por HTTPS.
+5. `[PENDENTE]` Adotar migracoes versionadas (Flyway/Liquibase) antes de producao real, e manter auditoria recorrente de dependencias (`npm audit`, Maven/OSV ou equivalente em CI).
 
 ## 1. Exposicao publica de endpoints GET
 
@@ -34,9 +43,9 @@ Status: `[RESOLVIDO]`.
 
 `ArtistaController` compara o artista autenticado (por e-mail) com o ID da URL antes de editar ou excluir.
 
-### Risco remanescente (nao critico)
+### DTO de atualizacao: avaliado, nao aplicado
 
-Ainda e recomendado, como melhoria futura, um DTO de atualizacao de perfil separado (`ArtistaUpdateRequest`) para nao expor campos como `tipoUsuario` na mesma entidade aceita pela API.
+Cheguei a considerar um `ArtistaUpdateRequest` para nao aceitar `tipoUsuario` no corpo do PUT. Na pratica, `tipoUsuario` nao e usado para elevar privilegio (o JWT ja carrega o `userType` real, gerado no login, e nao le esse campo da entidade em nenhuma verificacao de autorizacao) — entao aceitar esse campo no corpo do update e um risco cosmetico, nao uma escalada real de privilegio. Mantive a entidade direta para nao aumentar o escopo da mudanca sem um ganho de seguranca correspondente.
 
 ## 3. Exclusao arbitraria por ID
 
@@ -44,9 +53,9 @@ Status: `[RESOLVIDO]`.
 
 Verificacoes de dono continuam presentes em `ClienteController`, `PedidoController`, `PortifolioController`, `ArteController`, `ArtistaController` e `ServicoController`.
 
-### Melhoria futura
+### Testes automatizados
 
-Cobrir esses fluxos com testes de integracao automatizados (dono vs. nao-dono vs. anonimo) continua sendo uma boa adicao, mas nao e mais um risco de seguranca aberto.
+Adicionados `ArteControllerTest` e `PedidoControllerTest` (JUnit 5 + Mockito, no mesmo estilo das suites de service ja existentes), cobrindo dono, nao-dono e recurso inexistente para os fluxos de criacao/exclusao de arte e para leitura/exclusao/listagem de pedidos.
 
 ## 4. Vazamento de pedidos por filtro no frontend
 
@@ -70,7 +79,7 @@ Status: `[RESOLVIDO]`.
 
 Status: `[RESOLVIDO]`.
 
-`ArteController.createArte` agora recebe `Authentication`, busca o portfolio informado no corpo da requisicao e retorna 403 se o portfolio nao pertencer ao artista autenticado (mesmo padrao ja usado em `PortifolioController`/`PedidoController`).
+`ArteController.createArte` agora recebe `Authentication`, busca o portfolio informado no corpo da requisicao e retorna 403 se o portfolio nao pertencer ao artista autenticado (mesmo padrao ja usado em `PortifolioController`/`PedidoController`). Coberto por `ArteControllerTest`.
 
 ## 7. Upload de arquivos baseado apenas em Content-Type
 
@@ -87,6 +96,8 @@ Status: `[RESOLVIDO]` para validacao de conteudo; `[PARCIAL]` para reprocessamen
 
 `X-Content-Type-Options: nosniff` ja e enviado por padrao pelo Spring Security em todas as respostas, incluindo `/uploads/**`, sem necessidade de configuracao adicional.
 
+Testes automatizados em `ImageStorageServiceTest` cobrem: conteudo que nao e imagem real (rejeitado mesmo com `Content-Type` de imagem), PNG valido (aceito), `Content-Type` nao suportado (rejeitado) e arquivo vazio (rejeitado).
+
 ### Risco remanescente
 
 - WEBP nao possui decoder nativo no `ImageIO` do JDK sem plugin adicional; para esse formato a validacao fica restrita a assinatura binaria (nao ha decodificacao completa).
@@ -101,10 +112,10 @@ Status: `[RESOLVIDO]`.
 - `POST /api/login` agora define o JWT em um cookie `HttpOnly`, `SameSite=Lax`, `Path=/`, com `Secure` controlado pela variavel de ambiente `COOKIE_SECURE` (usar `true` atras de HTTPS em producao). O corpo da resposta (`LoginResponse`) nao inclui mais o token (`@JsonIgnore`), entao nem o proprio JavaScript da aplicacao consegue le-lo.
 - `JwtAuthenticationFilter` aceita o token tanto via header `Authorization: Bearer` (compatibilidade) quanto via cookie `artisanvault_token`.
 - Novo endpoint `POST /api/login/logout` expira o cookie no servidor.
-- O frontend (`api.ts`, `AuthContext.tsx`, `auth.service.ts`) parou de gravar o token em `localStorage`; apenas dados nao sensiveis do usuario (nome/e-mail/tipo/id) sao mantidos no `localStorage` para hidratar a UI, e a sessao e revalidada contra o backend (`/api/cliente/me` ou `/api/artistas/email`) a cada carregamento da pagina.
+- Novo endpoint `GET /api/login/me` retorna a identidade autenticada (e-mail/tipo/id/nome) resolvida no backend a partir do JWT. O frontend (`AuthContext.tsx`) usa esse endpoint como unica fonte de verdade da sessao: nao ha mais `localStorage.setItem`/`getItem` para dados de usuario em nenhum lugar do app. A cada carregamento de pagina, a identidade e buscada do backend; se o cookie for invalido/expirado, o usuario simplesmente aparece como nao autenticado.
 - `withCredentials: true` foi mantido (agora e o mecanismo real de transporte do cookie).
 
-### Risco remanescente (aceito para o escopo atual)
+### Risco remanescente
 
 CSRF classico e mitigado por `SameSite=Lax` (cookies nao sao enviados em POST/PUT/DELETE disparados por outro site), mas nao ha um token CSRF explicito. Se o app crescer para múltiplos subdominios ou precisar de `SameSite=None`, adicionar protecao CSRF explicita (dupla submissao de cookie ou header customizado) deve ser revisitado.
 
@@ -112,7 +123,11 @@ CSRF classico e mitigado por `SameSite=Lax` (cookies nao sao enviados em POST/PU
 
 Status: `[RESOLVIDO]`.
 
-`LoginRateLimiterService` mantem, em memoria, uma janela deslizante de 5 minutos por chave (`email:` e `ip:`, esta ultima considerando `X-Forwarded-For`). Apos 5 tentativas na janela, `POST /api/login` responde `429 Too Many Requests` e novas tentativas (mesmo com senha correta) sao bloqueadas ate a janela expirar. O contador e zerado no login bem-sucedido.
+`LoginRateLimiterService` mantem, em memoria, uma janela deslizante de 5 minutos por chave (`email:` e `ip:`). Apos 5 tentativas na janela, `POST /api/login` responde `429 Too Many Requests` e novas tentativas (mesmo com senha correta) sao bloqueadas ate a janela expirar. O contador e zerado no login bem-sucedido. Coberto por `LoginRateLimiterServiceTest` (bloqueio por e-mail, por IP, ausencia de bloqueio abaixo do limite, `reset` e isolamento entre chaves diferentes).
+
+### X-Forwarded-For: corrigido
+
+O IP usado na chave de rate limit so vem do header `X-Forwarded-For` quando `TRUST_PROXY_HEADERS=true` estiver explicitamente configurado (para ambientes atras de um proxy/load balancer confiavel que sobrescreve esse header). Por padrao (`false`), usa `request.getRemoteAddr()`, o IP real da conexao TCP — evitando que um cliente malicioso falsifique o header para contornar o limite por IP ou para forjar tentativas em nome do IP de outra pessoa.
 
 ### Risco remanescente
 
@@ -136,7 +151,7 @@ Backend (`pom.xml`):
 
 - `spring-boot-starter-parent` atualizado de `3.3.2` para `3.5.16` (ultima versao estavel da linha 3.5.x; evitamos o salto para a major 4.x para nao introduzir mudancas de API/arquitetura fora do escopo desta auditoria).
 - Removidas as versoes fixadas de `org.postgresql:postgresql` e `org.hibernate.orm:hibernate-core`, que agora seguem o BOM do Spring Boot (Postgres JDBC `42.7.11`, Hibernate `6.6.53.Final`), evitando divergencia futura do BOM.
-- Suite de testes (`./mvnw test`) executada com sucesso: 13/13 testes passando.
+- Suite de testes (`./mvnw test`) executada com sucesso: 34/34 testes passando (13 originais + 21 novos de seguranca).
 
 ### Observacao
 
@@ -155,9 +170,10 @@ spring.datasource.username=${DB_USERNAME:postgres}
 spring.jpa.hibernate.ddl-auto=${DDL_AUTO:update}
 spring.jpa.show-sql=${SHOW_SQL:true}
 app.cookie.secure=${COOKIE_SECURE:false}
+app.trust-proxy-headers=${TRUST_PROXY_HEADERS:false}
 ```
 
-Em producao, basta definir `DB_USERNAME` (usuario com privilegios minimos), `DDL_AUTO=validate`, `SHOW_SQL=false` e `COOKIE_SECURE=true` (exige HTTPS) sem tocar no codigo.
+Em producao, basta definir `DB_USERNAME` (usuario com privilegios minimos), `DDL_AUTO=validate`, `SHOW_SQL=false`, `COOKIE_SECURE=true` (exige HTTPS) e `TRUST_PROXY_HEADERS=true` (somente se houver um proxy confiavel na frente) sem tocar no codigo.
 
 ### Risco remanescente (fora do alcance de uma mudanca de codigo)
 
@@ -181,17 +197,27 @@ Em producao, basta definir `DB_USERNAME` (usuario com privilegios minimos), `DDL
 - [x] Adicionar headers seguros para `/uploads/**` (`X-Content-Type-Options: nosniff` via Spring Security).
 - [x] Trocar JWT em `localStorage` por cookie `HttpOnly`.
 - [x] Manter `withCredentials: true` (agora necessario para o cookie de sessao).
+- [x] Derivar `AuthUser` da resposta autenticada do backend (`GET /api/login/me`), nao do `localStorage`.
+- [x] Avaliar necessidade de DTOs de entrada/saida (Portifolio publico corrigido; demais entidades avaliadas e sem exposicao real apos as correcoes de listagem).
+- [x] Omitir `id_cliente`/`id_pedido` das respostas publicas de portfolio.
+- [x] Remover metodo morto `artistaService.login(email, senha)` do frontend.
 - [x] Adicionar rate limit no login.
+- [x] So confiar em `X-Forwarded-For` atras de proxy explicitamente configurado (`TRUST_PROXY_HEADERS`).
+- [ ] Migrar rate limit para armazenamento distribuido se houver multiplas instancias.
 - [x] Atualizar dependencias do frontend.
 - [x] Atualizar dependencias do backend.
 - [ ] Rotacionar segredos antigos que ja tenham sido expostos (depende do ambiente real de producao).
 - [ ] Usar usuario de banco com privilegios minimos (depende do ambiente real de producao; configuravel via `DB_USERNAME`).
-- [x] Tornar `show-sql` e `ddl-auto` configuraveis por ambiente (`SHOW_SQL`, `DDL_AUTO`), com `update`/`true` apenas como default de desenvolvimento.
+- [x] Tornar `show-sql`, `ddl-auto`, `cookie.secure` e `trust-proxy-headers` configuraveis por ambiente, com defaults seguros de desenvolvimento.
+- [ ] Definir `COOKIE_SECURE=true`, `DDL_AUTO=validate` e `SHOW_SQL=false` no ambiente de producao.
+- [x] Adicionar testes de integracao para autorizacao dos controllers (arte, pedido), upload invalido e rate limit.
 
-## Itens fora do escopo desta rodada (dependem de infraestrutura real)
+## Itens fora do escopo desta rodada (dependem de infraestrutura real ou decisao de produto)
 
 1. Provisionar um usuario de banco de dados com privilegios minimos em um Postgres de producao real.
 2. Rotacionar segredos que eventualmente ja tenham vazado antes desta auditoria.
 3. Adotar Flyway/Liquibase para versionar o schema (projeto arquitetural proprio).
 4. Migrar para Spring Boot 4.x (major upgrade, fora do escopo de uma correcao de seguranca).
 5. Rate limit distribuido (Redis) caso o backend passe a rodar em multiplas instancias.
+6. Protecao CSRF explicita, caso a politica de cookie mude para `SameSite=None`/multiplos subdominios.
+7. Reencodar todas as imagens a partir dos pixels (e decidir o que fazer com WEBP), caso uploads de terceiros nao confiaveis se tornem um vetor mais critico.
