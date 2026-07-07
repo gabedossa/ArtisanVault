@@ -1,5 +1,7 @@
 # ArtisanVault
 
+[![CI](https://github.com/gabedossa/ArtisanVault/actions/workflows/ci.yml/badge.svg)](https://github.com/gabedossa/ArtisanVault/actions/workflows/ci.yml)
+
 *[Versão em português](README.md)*
 
 Full-stack platform connecting artists to clients. Artists publish portfolios and services; clients discover talent, request services, and track orders all the way through to delivery — all in one place.
