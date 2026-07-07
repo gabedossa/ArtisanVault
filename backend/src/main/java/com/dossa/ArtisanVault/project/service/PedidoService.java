@@ -26,6 +26,10 @@ public class PedidoService {
         return pedidoRepo.marcarEntregue(idPedido, idPortfolio, imagemUrl);
     }
 
+    public int marcarTrabalhando(Long idPedido){
+        return pedidoRepo.marcarTrabalhando(idPedido);
+    }
+
     public int deleteById(Long id){
         return pedidoRepo.deleteById(id);
     }

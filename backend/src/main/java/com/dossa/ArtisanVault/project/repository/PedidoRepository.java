@@ -64,4 +64,10 @@ public class PedidoRepository {
         String sql = "UPDATE pedido SET entregue = true, trabalhando = false, id_portfolio = ?, imagem_url = ? WHERE id_pedido = ?";
         return jdbcTemplate.update(sql, idPortfolio, imagemUrl, idPedido);
     }
+
+    //Marcar pedido como em andamento
+    public int marcarTrabalhando(Long idPedido){
+        String sql = "UPDATE pedido SET trabalhando = true WHERE id_pedido = ?";
+        return jdbcTemplate.update(sql, idPedido);
+    }
 }

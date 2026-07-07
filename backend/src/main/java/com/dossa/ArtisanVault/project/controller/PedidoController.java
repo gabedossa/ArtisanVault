@@ -132,6 +132,26 @@ public class PedidoController {
         }
     }
 
+    //Artista marca que começou a trabalhar no pedido
+    @PutMapping("/{id}/iniciar")
+    public ResponseEntity<?> iniciar(@PathVariable Long id, Authentication authentication) {
+        Pedido pedido = pedidoService.findById(id);
+        if (pedido == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Pedido não encontrado.");
+        }
+        if (Boolean.TRUE.equals(pedido.getEntregue())) {
+            return ResponseEntity.badRequest().body("Este pedido já foi entregue.");
+        }
+
+        Optional<Artista> artistaOpt = artistaService.findByEmail(authentication.getName());
+        if (artistaOpt.isEmpty() || !pedido.getId_artista().equals(artistaOpt.get().getIdArtista())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Você só pode atualizar seus próprios pedidos.");
+        }
+
+        pedidoService.marcarTrabalhando(id);
+        return ResponseEntity.ok(pedidoService.findById(id));
+    }
+
     @DeleteMapping("/delete/{id}")
     public ResponseEntity<String> deleteById(@PathVariable Long id) {
         int result = pedidoService.deleteById(id);
